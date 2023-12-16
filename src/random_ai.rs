@@ -15,7 +15,7 @@ impl BadPlayer {
 }
 
 impl ChessPlayer for BadPlayer {
-    fn best_move(&mut self, chess: &mut Chess) -> Move {
+    fn best_move(&mut self, chess: &mut Chess) -> Moves {
         let legal_moves = chess.generate_legal_moves();
         return legal_moves[self.rng.gen_range(0..legal_moves.len())];
     }

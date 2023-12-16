@@ -2,17 +2,19 @@ use super::*;
 
 impl Chess {
     pub fn build(fen: &str) -> Chess {
-        legal_moves::precomputed_move_data();
+        legal_moves::precompute();
         
-        let mut iter = fen.split(" ");
+        let mut iter = fen.trim().split(" ");
         let mut chess = Chess {
             board: [NONE;64],
-            white_turn: true,
-            castle: CASTLE_NONE,
             en_passant: u8::MAX,
+            castling: CASTLE_NONE,
             half_move: 0,
-            turn: 1,
-            irreversable_state: Vec::new()
+            full_turn: 1,
+            colour_turn: NONE_COLOUR,
+            white_side: SideState { king_square: 0, pieces: Vec::new(), control: [0;64], slide_control: [0;64] },
+            black_side: SideState { king_square: 0, pieces: Vec::new(), control: [0;64], slide_control: [0;64] },
+            irreversable_state: Vec::new(),
         };
         chess.irreversable_state.reserve_exact(MAX_DEPTH);
         // Piece Placement
@@ -25,31 +27,31 @@ impl Chess {
             } else if symbol.is_ascii_digit() {
                 file += utils::number_from_0_9(symbol);
             } else {
-                let piece_colour = if symbol.is_ascii_uppercase() {piece::WHITE} else {piece::BLACK};
-                let piece_type = match symbol.to_ascii_lowercase() {
-                    'p' => PAWN, 'n' => KNIGHT, 'b' => BISHOP,
-                    'r' => ROCK, 'q' => QUEEN, 'k' => KING,
-                    _ => NONE
-                };
-                chess.board[rank * 8 + file] = piece_type | piece_colour;
+                let square = rank * 8 + file;
+                let piece = Piece::from_symbol(symbol);
+                if piece.is_colour(WHITE) {
+                    chess.white_side.add_piece_list(piece.get_type(), square as u8);
+                    chess.update_control(WHITE, piece.get_type(), square as u8, 1);
+                }
+                else {
+                    chess.black_side.add_piece_list(piece.get_type(), square as u8);
+                    chess.update_control(BLACK, piece.get_type(), square as u8, 1);
+                }
+                chess.board[square] = piece;
                 file += 1
             }
         }
         // Side to move
-        chess.white_turn = match iter.next() {
-            Some("w") => true,
-            Some("b") => false,
-            _ => panic!("side to move")
-        };
+        chess.colour_turn = if iter.next() == Some("b") {BLACK} else {WHITE};
         // Castling ability
         let string = iter.next();
         if string != Some("-") {
             for ch in string.expect("castling ability").chars() {
                 match ch {
-                    'K' => chess.castle |= CASTLE_W_K,
-                    'Q' => chess.castle |= CASTLE_W_Q,
-                    'k' => chess.castle |= CASTLE_B_K,
-                    'q' => chess.castle |= CASTLE_B_Q,
+                    'K' => chess.castling |= CASTLE_WHITE_KING,
+                    'Q' => chess.castling |= CASTLE_WHITE_QUEEN,
+                    'k' => chess.castling |= CASTLE_BLACK_KING,
+                    'q' => chess.castling |= CASTLE_BLACK_QUEEN,
                     _ => panic!("castling ability")
                 }
             }
@@ -61,11 +63,13 @@ impl Chess {
             chess.en_passant = utils::square_from_text(chars.next().unwrap(), chars.next().unwrap());
         }
         // Halfmove clock
-        let fen_half = iter.next().expect("FEN halfmove clock");
-        chess.half_move = fen_half.parse().unwrap();
+        if let Some(fen_half) = iter.next() {
+            chess.half_move = fen_half.parse().unwrap();
+        }
         // Fullmove counter
-        let fen_full = iter.next().expect("FEN fullmove counter");
-        chess.turn = fen_full.parse().unwrap();
+        if let Some(fen_full) = iter.next() {
+            chess.full_turn = fen_full.parse().unwrap();
+        }
         
         return chess
     }
