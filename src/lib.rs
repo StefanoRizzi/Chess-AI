@@ -20,21 +20,14 @@ pub fn compete(player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer, g
     for _ in 0..games {
         let mut chess = Chess::build("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
         play(&mut chess, player_1, player_2);
-        if chess.half_move >= 100 {draw += 1} 
-        else if chess.colour_turn == WHITE {
-            if chess.black_side.control[chess.white_side.king_square as usize] == 0 {
-                draw += 1;
-            } else {
-                lost += 1
-            }
-        }
-        else {
-            if chess.white_side.control[chess.black_side.king_square as usize] == 0 {
-                draw += 1;
-            } else {
-                won += 1
-            }
-        }
+        if chess.is_king_in_check() {
+            if chess.is_white_to_move
+            {lost += 1}
+            else
+            {won += 1}
+        } 
+        else
+        {draw += 1} 
     }
     println!("won: {won} draw: {draw} lost: {lost}");
 }
@@ -42,17 +35,27 @@ pub fn compete(player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer, g
 pub fn play(mut chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer) {
     chess.display();
     loop {
-        if chess.half_move >= 100 {break}
         if chess.generate_legal_moves().len() == 0 {break}
         let movee = player_1.best_move(&mut chess);
         chess.make_move(movee);
-        chess.update_display(movee);
+        chess.display();
+        for j in (0..8).rev() {
+            for i in 0..8 {
+                print!("  {}", chess.side[0].attacks[i+j*8]);
+            }
+            println!()
+        }
         
-        if chess.half_move >= 100 {break}
         if chess.generate_legal_moves().len() == 0 {break}
         let movee = player_2.best_move(&mut chess);
         chess.make_move(movee);
-        chess.update_display(movee);
+        chess.display();
+        for j in (0..8).rev() {
+            for i in 0..8 {
+                print!("  {}", chess.side[0].attacks[i+j*8]);
+            }
+            println!()
+        }
     }
 }
 

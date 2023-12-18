@@ -1,9 +1,11 @@
+use crate::chess::utils::*;
+
 use super::*;
 
 
 impl Chess {
     pub fn display(&self) {
-        if !DISPLAY {return}
+        if unsafe {!DISPLAY} {return}
         print!(r#"
   /========================\
 8 |   :::   :::   :::   :::|
@@ -31,7 +33,7 @@ impl Chess {
 
 
     pub fn update_display(&self, movee: Moves) {
-        if !DISPLAY {return}
+        if unsafe {!DISPLAY} {return}
         match movee {
             | Moves::Move { start, target }
             | Moves::DoublePush { start, target }
@@ -42,19 +44,19 @@ impl Chess {
             Moves::EnPassant { start, target } => {
                 self.update_square(start);
                 self.update_square(target);
-                if self.colour_turn == BLACK // jet done
+                if !self.is_white_to_move // previous turn color
                 {self.update_square(target-8)}
                 else
                 {self.update_square(target+8)}
             }
             Moves::KingCastling => {
-                let start = if self.colour_turn == BLACK {4} else {60};
+                let start = if !self.is_white_to_move {4} else {60};
                 for square in start..(start+4) {
                     self.update_square(square);
                 }
             }
             Moves::QueenCastling => {
-                let start = if self.colour_turn == BLACK {0} else {56};
+                let start = if !self.is_white_to_move {0} else {56};
                 for square in start..(start+5) {
                     self.update_square(square);
                 }
@@ -64,7 +66,7 @@ impl Chess {
     fn update_square(&self, square: u8) {
         let piece = self.board[square as usize];
         let look = if piece == NONE
-        { if (square + square / 8) % 2 == 0 {':'} else {' '} }
+        { if is_black_square(square) {':'} else {' '} }
         else
         { piece.symbol() };
         let up = 3 + square / 8;
@@ -72,5 +74,23 @@ impl Chess {
         print!("\x1b[{}A\r\x1b[{}C{}", up, right, look);
         println!("\x1b[{}B\r", up-1);
     }
-    
+    pub fn display_attacks(&self, colour: Colour) {
+        Chess::display_attacks_pieces(&self.side[colour.colour_index()].attacks);
+    }
+    pub fn display_attacks_pieces(attacks: &[i8; 64]) {
+        println!(r#"  /========================\"#);
+        for j in (0..8).rev() {
+            print!("{j} |");
+            for i in 0..8 {
+                let square = i+j*8;
+                if is_black_square(square) {
+                    print!(":{}:", attacks[square as usize]);
+                } else {
+                    print!(" {} ", attacks[square as usize]);
+                }
+            }
+            println!("|");
+        }
+        println!(r#"  \========================/"#);
+    }
 }

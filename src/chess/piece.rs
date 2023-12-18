@@ -19,22 +19,24 @@ pub const WHITE: Colour= Colour(8);
 pub const BLACK: Colour= Colour(16);
 impl Piece {
     pub fn new(piece: PieceType, colour: Colour) -> Piece {Piece(piece.0 | colour.0)}
-    pub fn get_type(self) -> PieceType {PieceType(self.0 & !(WHITE.0 + BLACK.0))}
+    pub fn get_type(self) -> PieceType {PieceType(self.0 & !(WHITE.0 | BLACK.0))}
+    pub fn get_colour(self) -> Colour {Colour(self.0 & (WHITE.0 | BLACK.0))}
     pub fn is_type(self, piece: PieceType) -> bool {self.get_type().0 == piece.0}
     pub fn is_colour(self, colour: Colour) -> bool {self.0 & colour.0 != 0}
     
     pub fn from_symbol(symbol: char) -> Piece {
         let piece = match symbol.to_ascii_lowercase() {
             'p' => PAWN, 'n' => KNIGHT, 'b' => BISHOP,
-            'r' => ROOK, 'q' => QUEEN, 'k' => KING, _ => panic!(),
+            'r' => ROOK, 'q' => QUEEN, 'k' => KING, _ => unreachable!(),
         };
         Piece::new(piece, if symbol.is_ascii_uppercase() {WHITE} else {BLACK})    
     }
     pub fn symbol(self: Piece) -> char {
-        if self.is_colour(WHITE)
-        {[' ','K','N','P','B','R','Q'][self.get_type().0 as usize]} 
-        else
-        {[' ','k','n','p','b','r','q'][self.get_type().0 as usize]}
+        let symbol = match self.get_type() {
+            PAWN => 'p', KNIGHT => 'n', BISHOP => 'b',
+            ROOK => 'r', QUEEN => 'q', KING => 'k', _ => unreachable!(),
+        };
+        if self.is_colour(WHITE) {symbol.to_ascii_uppercase()} else {symbol}
     }
 }
 impl PieceType {
@@ -43,10 +45,18 @@ impl PieceType {
         match self {
             BISHOP => 4..8,
             ROOK => 0..4,
-            _ => 0..8,
+            QUEEN => 0..8,
+            _ => unreachable!(),
         }
     }
+    pub fn piece_index(self) -> usize {return (self.0 - 1).into()}
 }
 impl Colour {
+    pub fn new(is_white: bool) -> Colour {if is_white {WHITE} else {BLACK}}
     pub fn opponent(self) -> Colour {Colour(self.0 ^ (WHITE.0+BLACK.0))}
+    pub fn colour_index(self) -> usize {match self {   
+        WHITE => 0,
+        BLACK => 1,
+        _ => unreachable!(),
+    }}
 }

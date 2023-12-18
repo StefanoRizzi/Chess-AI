@@ -6,17 +6,18 @@ impl Chess {
         
         let mut iter = fen.trim().split(" ");
         let mut chess = Chess {
-            board: [NONE;64],
+            board: [NONE; 64],
             en_passant: u8::MAX,
             castling: CASTLE_NONE,
             half_move: 0,
             full_turn: 1,
-            colour_turn: NONE_COLOUR,
-            white_side: SideState { king_square: 0, pieces: Vec::new(), control: [0;64], slide_control: [0;64] },
-            black_side: SideState { king_square: 0, pieces: Vec::new(), control: [0;64], slide_control: [0;64] },
+            is_white_to_move: true,
+            side: [Default::default(), Default::default()],
             irreversable_state: Vec::new(),
+            moves_history: Vec::new(),
         };
         chess.irreversable_state.reserve_exact(MAX_DEPTH);
+        chess.moves_history.reserve_exact(MAX_MOVES);
         // Piece Placement
         let fen_board = iter.next().expect("FEN board");
         let (mut rank, mut file) = (7, 0);
@@ -29,20 +30,16 @@ impl Chess {
             } else {
                 let square = rank * 8 + file;
                 let piece = Piece::from_symbol(symbol);
-                if piece.is_colour(WHITE) {
-                    chess.white_side.add_piece_list(piece.get_type(), square as u8);
-                    chess.update_control(WHITE, piece.get_type(), square as u8, 1);
-                }
-                else {
-                    chess.black_side.add_piece_list(piece.get_type(), square as u8);
-                    chess.update_control(BLACK, piece.get_type(), square as u8, 1);
-                }
+                let colour = piece.get_colour();
+
+                chess.side[colour.colour_index()].new_piece(piece.get_type(), square as u8);
+                chess.put_attack_and_update(piece.get_type(), colour, square as u8);
                 chess.board[square] = piece;
                 file += 1
             }
         }
         // Side to move
-        chess.colour_turn = if iter.next() == Some("b") {BLACK} else {WHITE};
+        chess.is_white_to_move = iter.next() == Some("w");
         // Castling ability
         let string = iter.next();
         if string != Some("-") {
