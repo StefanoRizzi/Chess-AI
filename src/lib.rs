@@ -1,62 +1,80 @@
 pub mod chess;
-pub mod perft;
-pub mod random_ai;
-pub mod rizzi_the_boss;
-use chess::*;
+pub mod player;
 
-use rand::Rng;
+use std::sync::Mutex;
+use std::{thread::sleep, time::Duration};
 
-pub trait ChessPlayer {
-    fn best_move(&mut self, chess: &mut Chess) -> Moves;
+pub use chess::*;
+pub use player::*;
+
+pub use std::io::Write;
+pub use std::fs::File;
+// SETTINGS
+pub static mut DISPLAY: bool = true;
+
+pub static LOG: Mutex<Option<File>> = Mutex::new(None);
+pub fn write_to_log(message: &str) {
+    (*LOG.lock().unwrap()).as_mut().unwrap().write(message.as_bytes()).unwrap();
+    (*LOG.lock().unwrap()).as_mut().unwrap().write("\n".as_bytes()).unwrap();
 }
 
-pub fn benchmark() {
-    let mut chess = Chess::new();
-    chess.time_perft(5);
+pub fn benchmark(depth: u16) {
+    let mut chess = Chess::start_position();
+    chess.time_perft(depth);
 }
 
 pub fn compete(player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer, games: u32) {
     let (mut won, mut lost, mut draw) = (0, 0, 0);
-    for _ in 0..games {
-        let mut chess = Chess::build("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8");
-        play(&mut chess, player_1, player_2);
-        if chess.is_king_in_check() {
-            if chess.is_white_to_move
-            {lost += 1}
-            else
-            {won += 1}
-        } 
-        else
-        {draw += 1} 
+    for n in 0..games {
+        println!("Game {} of {games}", n+1);
+        let mut chess = Chess::start_position();
+        if n % 2 == 0 {
+            let outcome = play(&mut chess, player_1, player_2);
+            match outcome {
+                ChessOutcome::Draw => draw += 1,
+                ChessOutcome::WhiteWinner => won += 1,
+                ChessOutcome::BlackWinner => lost += 1,
+            }
+        }
+        else {
+            let outcome = play(&mut chess, player_2, player_1);
+            match outcome {
+                ChessOutcome::Draw => draw += 1,
+                ChessOutcome::WhiteWinner => lost += 1,
+                ChessOutcome::BlackWinner => won += 1,
+            }
+        }
+        println!("[P1] Won: {won} Draw: {draw} Lost: {lost}");
     }
-    println!("won: {won} draw: {draw} lost: {lost}");
 }
 
-pub fn play(mut chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer) {
+pub fn play(chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer) -> ChessOutcome {
+    player_1.notify_new_game();
+    player_2.notify_new_game();
+    player_1.set_position(&chess);
+    player_2.set_position(&chess);
     chess.display();
+    let mut moves;
     loop {
-        if chess.generate_legal_moves().len() == 0 {break}
-        let movee = player_1.best_move(&mut chess);
-        chess.make_move(movee);
-        chess.display();
-        for j in (0..8).rev() {
-            for i in 0..8 {
-                print!("  {}", chess.side[0].attacks[i+j*8]);
-            }
-            println!()
-        }
-        
-        if chess.generate_legal_moves().len() == 0 {break}
-        let movee = player_2.best_move(&mut chess);
-        chess.make_move(movee);
-        chess.display();
-        for j in (0..8).rev() {
-            for i in 0..8 {
-                print!("  {}", chess.side[0].attacks[i+j*8]);
-            }
-            println!()
-        }
+        moves = chess.generate_legal_moves();
+        if chess.is_finished(&moves) {break}
+        sleep(Duration::from_millis(1));
+        let r#move = player_1.best_move(chess, None);
+        chess.make_move(r#move);
+        player_1.make_move(r#move);
+        player_2.make_move(r#move);
+        chess.update_display(r#move);
+
+        moves = chess.generate_legal_moves();
+        if chess.is_finished(&moves) {break}
+        sleep(Duration::from_millis(1));
+        let r#move = player_2.best_move(chess, None);
+        chess.make_move(r#move);
+        player_1.make_move(r#move);
+        player_2.make_move(r#move);
+        chess.update_display(r#move);
     }
+    chess.get_outcome(&moves)
 }
 
 
@@ -66,18 +84,18 @@ mod tests {
 
     #[test]
     fn chess_new() {
-        let chess = chess::Chess::new();
-        assert_eq!(chess.board[3], Piece::new(QUEEN, WHITE));
-        assert_eq!(chess.board[4], Piece::new(KING, WHITE));
+        let chess = chess::Chess::start_position();
+        assert_eq!(chess.board(3), Piece::new(QUEEN, WHITE));
+        assert_eq!(chess.board(4), Piece::new(KING, WHITE));
     }
     #[test]
     fn chess_move() {
-        let mut chess = chess::Chess::new();
-        chess.make_move(Moves::Move { start: 10, target: 18 });
-        assert_eq!(chess.board[10], NONE);
-        assert_eq!(chess.board[18], Piece::new(PAWN, WHITE));
-        chess.unmake_move(Moves::Move { start: 10, target: 18 });
-        assert_eq!(chess.board[10], Piece::new(PAWN, WHITE));
-        assert_eq!(chess.board[18], NONE);
+        let mut chess = chess::Chess::start_position();
+        chess.make_move(Move::new(10, 18, NO_FLAG));
+        assert_eq!(chess.board(10), NONE);
+        assert_eq!(chess.board(18), Piece::new(PAWN, WHITE));
+        chess.unmake_move(Move::new(10, 18, NO_FLAG));
+        assert_eq!(chess.board(10), Piece::new(PAWN, WHITE));
+        assert_eq!(chess.board(18), NONE);
     }
 }

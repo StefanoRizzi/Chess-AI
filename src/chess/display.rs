@@ -32,38 +32,29 @@ impl Chess {
     }
 
 
-    pub fn update_display(&self, movee: Moves) {
+    pub fn update_display(&self, r#move: Move) {
         if unsafe {!DISPLAY} {return}
-        match movee {
-            | Moves::Move { start, target }
-            | Moves::DoublePush { start, target }
-            | Moves::Promotion { start, target, .. } => {
-                self.update_square(start);
-                self.update_square(target);
-            }
-            Moves::EnPassant { start, target } => {
-                self.update_square(start);
-                self.update_square(target);
+        let (start, target) = (r#move.start(), r#move.target());
+        self.update_square(start);
+        self.update_square(target);
+        match r#move.flag() {
+            EN_PASSANT_FLAG => {
                 if !self.is_white_to_move // previous turn color
                 {self.update_square(target-8)}
                 else
                 {self.update_square(target+8)}
             }
-            Moves::KingCastling => {
-                let start = if !self.is_white_to_move {4} else {60};
-                for square in start..(start+4) {
+            CASTLE_FLAG => {
+                let range = if r#move.is_king_castling()
+                {start..start+4} else {start-4..start+1};
+                for square in range {
                     self.update_square(square);
                 }
             }
-            Moves::QueenCastling => {
-                let start = if !self.is_white_to_move {0} else {56};
-                for square in start..(start+5) {
-                    self.update_square(square);
-                }
-            }
+            _ => ()
         }
     }
-    fn update_square(&self, square: u8) {
+    fn update_square(&self, square: Square) {
         let piece = self.board[square as usize];
         let look = if piece == NONE
         { if is_black_square(square) {':'} else {' '} }
@@ -71,8 +62,7 @@ impl Chess {
         { piece.symbol() };
         let up = 3 + square / 8;
         let right = 4 + (square % 8) * 3;
-        print!("\x1b[{}A\r\x1b[{}C{}", up, right, look);
-        println!("\x1b[{}B\r", up-1);
+        println!("\x1b[{}A\r\x1b[{}C{}\x1b[{}B\r", up, right, look, up-1);
     }
     pub fn display_attacks(&self, colour: Colour) {
         Chess::display_attacks_pieces(&self.side[colour.colour_index()].attacks);

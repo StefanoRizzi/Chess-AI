@@ -1,20 +1,27 @@
-// SETTINGS
-pub static mut DISPLAY: bool = true;
 
 // max turn 30 * 50 = 1500
 const MAX_DEPTH: usize = 3000;
 const MAX_MOVES: usize = 218;
-const START_POSITION: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 mod fen;
 mod display;
+pub mod r#move;
 pub mod piece;
 pub mod legal_moves;
+pub mod perft;
+pub mod zobrist;
 
+pub use fen::*;
 pub use piece::*;
 
 use castle::*;
 use legal_moves::*;
+pub use super::*;
+pub use r#move::*;
+pub use zobrist::*;
+pub use utils::*;
+
+pub type Square = i8;
 
 pub mod castle {
     pub const CASTLE_NONE: u8 = 0;
@@ -22,17 +29,6 @@ pub mod castle {
     pub const CASTLE_WHITE_KING: u8 = 2;
     pub const CASTLE_BLACK_QUEEN: u8 = 4;
     pub const CASTLE_BLACK_KING: u8 = 8;
-}
-
-pub type Square = u8;
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub enum Moves {
-    Move{start: Square, target: Square},
-    QueenCastling,
-    KingCastling,
-    Promotion{start: Square, target: Square, promotion_type: PieceType},
-    DoublePush{start: Square, target: Square},
-    EnPassant{start: Square, target: Square},
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,42 +53,51 @@ impl Default for SideState {
         return side
     }
 }
-impl SideState {
-    pub fn pieces(&mut self, piece_type: PieceType) -> &mut Vec<Square> {
+impl Chess {
+    fn pieces(&mut self, colour_index: usize, piece_type: PieceType) -> &mut Vec<Square> {
         match piece_type {
             KING => unreachable!(),
-            PAWN => &mut self.pawns,
-            KNIGHT => &mut self.knights,
-            BISHOP => &mut self.bishops,
-            ROOK => &mut self.rooks,
-            QUEEN => &mut self.queens,
+            PAWN => &mut self.side[colour_index].pawns,
+            KNIGHT => &mut self.side[colour_index].knights,
+            BISHOP => &mut self.side[colour_index].bishops,
+            ROOK => &mut self.side[colour_index].rooks,
+            QUEEN => &mut self.side[colour_index].queens,
             _ => unreachable!(),
         }
     }
-    fn new_piece(&mut self, piece_type: PieceType, square: Square) {
+    
+    fn new_piece(&mut self, colour_index: usize, piece_type: PieceType, square: Square) {
         match piece_type {
-            KING => self.king = square,
-            _ => self.pieces(piece_type).push(square),
+            KING => self.side[colour_index].king = square,
+            _ => self.pieces(colour_index, piece_type).push(square),
         }
+        self.piece_hash(piece_type, colour_index, square);
+    }
+
+    fn add_piece(&mut self, colour_index: usize, piece_type: PieceType, square: Square) {
+        self.pieces(colour_index, piece_type).push(square);
+        self.piece_hash(piece_type, colour_index, square);
     }
     
-    fn remove_piece(&mut self, piece_type: PieceType, square: Square) {
-        let pieces = self.pieces(piece_type);
+    fn remove_piece(&mut self, colour_index: usize, piece_type: PieceType, square: Square) {
+        let pieces = self.pieces(colour_index, piece_type);
         pieces.swap_remove(pieces.iter().position(|&p|p == square).unwrap());
+        self.piece_hash(piece_type, colour_index, square);
     }
     
-    fn move_piece(&mut self, piece_type: PieceType, start: Square, target: Square) {
+    fn move_piece(&mut self, colour_index: usize, piece_type: PieceType, start: Square, target: Square) {
         match piece_type {
-            KING => self.king = target,
+            KING => self.side[colour_index].king = target,
             _ => {
-                let pieces = self.pieces(piece_type);
+                let pieces = self.pieces(colour_index, piece_type);
                 let index = pieces.iter().position(|&p|p == start).unwrap();
                 pieces[index] = target;
             }
         }
+        self.piece_hash(piece_type, colour_index, start);
+        self.piece_hash(piece_type, colour_index, target);
     }
-}
-impl Chess {
+
     fn spread_attack_direcion(&mut self, piece_type: PieceType, colour: Colour, start: Square, dir_index: usize, value: i8) {
         let dir = DIRECTION_OFFSETS[dir_index];
         let dist_edge = unsafe {NUM_SQUARES_TO_EDGES[start as usize][dir_index]};
@@ -180,21 +185,75 @@ impl Chess {
 */
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chess {
-    pub board: [Piece; 64],
+    board: [Piece; 64],
     pub en_passant: Square,
     pub castling: u8,
     pub half_move: u16,
     pub full_turn: u16,
-    pub is_white_to_move: bool,
+    is_white_to_move: bool,
     pub side: [SideState; 2],
-    // eaten piece | en passant | castlilg | half move clock
-    pub irreversable_state: Vec<(PieceType, Square, u8, u16)>,
-    pub moves_history: Vec<Moves>,
+    // eaten piece | en passant | castlilg | half move clock | hash
+    pub irreversable_state: Vec<(PieceType, Square, u8, u16, u32)>,
+    //pub moves_history: Vec<Move>,
+    hash: u32,
+    //pub positions_history: Vec<u32>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChessOutcome {Draw, WhiteWinner, BlackWinner}
 
 impl Chess {
-    pub fn new() -> Chess {Chess::build(START_POSITION)}
+    pub fn new() -> Chess {
+        legal_moves::precompute();
+        
+        let mut chess = Chess {
+            board: [NONE; 64],
+            en_passant: -1,
+            castling: CASTLE_NONE,
+            half_move: 0,
+            full_turn: 1,
+            is_white_to_move: true,
+            side: [Default::default(), Default::default()],
+            irreversable_state: Vec::new(),
+            //moves_history: Vec::new(),
+            hash: 0,
+        };
+        chess.new_piece(0, KING, 15);
+        chess.new_piece(1, KING, 49);
+        chess.irreversable_state.reserve_exact(MAX_DEPTH);
+        //chess.moves_history.reserve_exact(MAX_MOVES);
+        chess
+    }
+    pub fn start_position() -> Chess {Chess::build(START_POSITION)}
+    pub fn position(num: usize) -> Chess {
+        Chess::build([
+            START_POSITION,
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ",
+            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ",
+            "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+        ][num-1])
+    }
+    pub fn hash(&self) -> u32 {
+        let hash = self.castling_hash(self.hash);
+        self.en_passant_hash(hash)
+    }
+    pub fn is_white_to_move(&self) -> bool {self.is_white_to_move}
+    pub fn set_turn(&mut self, is_white_to_move: bool) {
+        if self.is_white_to_move != is_white_to_move {
+            self.black_turn_hash();
+        }
+        self.is_white_to_move = is_white_to_move;
+    }
+    pub fn get_repetitions(&self) -> u16 {
+        let hash = self.hash();
+        let positions = self.half_move;
+        self.irreversable_state.iter().rev().take(positions as usize).skip(3).step_by(2).take_while(|el|{
+            self.castling == el.2
+        }).filter(|el|el.4 == hash).count() as u16
+    }
+    pub fn board(&self, square: Square) -> Piece {self.board[square as usize]}
     pub fn colour_to_move(&self) -> Colour {Colour::new(self.is_white_to_move)}
     pub fn colour_index(&self) -> usize {!self.is_white_to_move as usize /*self.colour_to_move().colour_index()*/}
     pub fn opponent_index(&self) -> usize {self.is_white_to_move as usize /*self.colour_to_move().opponent().colour_index()*/}
@@ -203,45 +262,54 @@ impl Chess {
         return self.side[self.opponent_index()].attacks[self.get_king_square() as usize];
     }
     pub fn is_king_in_check(&self) -> bool {self.get_king_treats() != 0}
+    pub fn is_finished(&self, moves: &Vec<Move>) -> bool {
+        moves.len() == 0 || self.get_repetitions() >= 1 || self.half_move >= 100
+    }
+    pub fn get_outcome(&self, moves: &Vec<Move>) -> ChessOutcome {
+        if self.is_king_in_check() && moves.len() == 0 {
+            if self.is_white_to_move {return ChessOutcome::BlackWinner}
+            return ChessOutcome::WhiteWinner;
+        }
+        return ChessOutcome::Draw;
+    }
 
-    pub fn make_move(&mut self, movee: Moves) {
+    pub fn make_move(&mut self, r#move: Move) {
         let colour = self.colour_to_move();
         let colour_index = self.colour_index();
         let opponent_index = self.opponent_index();
-        match movee {
-            Moves::KingCastling => {
-                self.irreversable_state.push((NONE_TYPE, self.en_passant, self.castling, self.half_move));
-                self.en_passant = u8::MAX;
+        
+
+        match r#move.flag() {
+            CASTLE_FLAG => {
+                self.irreversable_state.push((NONE_TYPE, self.en_passant, self.castling, self.half_move, self.hash()));
+                self.en_passant = -1;
                 self.half_move += 1;
                 if self.is_white_to_move {
-                    self.make_castle(WHITE, 4, 7, 6, 5);
                     self.castling &= !(CASTLE_WHITE_QUEEN | CASTLE_WHITE_KING);
+                    if r#move.is_king_castling() {
+                        self.make_castle(WHITE, 4, 7, 6, 5);
+                    } else {
+                        self.make_castle(WHITE, 4, 0, 2, 3);
+                    }
                 } else {
-                    self.make_castle(BLACK, 60, 63, 62, 61);
                     self.castling &= !(CASTLE_BLACK_QUEEN | CASTLE_BLACK_KING);
+                    if r#move.is_king_castling() {
+                        self.make_castle(BLACK, 60, 63, 62, 61);
+                    } else {
+                        self.make_castle(BLACK, 60, 56, 58, 59);
+                    }
                 }
             }
-            Moves::QueenCastling => {
-                self.irreversable_state.push((NONE_TYPE, self.en_passant, self.castling, self.half_move));
-                self.en_passant = u8::MAX;
-                self.half_move += 1;
-                if self.is_white_to_move {
-                    self.make_castle(WHITE, 4, 0, 2, 3);
-                    self.castling &= !(CASTLE_WHITE_QUEEN | CASTLE_WHITE_KING);
-                } else {
-                    self.make_castle(BLACK, 60, 56, 58, 59);
-                    self.castling &= !(CASTLE_BLACK_QUEEN | CASTLE_BLACK_KING);
-                }
-            }
-            Moves::Move { start, target } => {
+            NO_FLAG => {
+                let (start, target) = (r#move.start(), r#move.target());
                 let start_type = self.board[start as usize].get_type();
                 let target_type = self.board[target as usize].get_type();
                 
-                self.irreversable_state.push((target_type, self.en_passant, self.castling, self.half_move));
-                self.en_passant = u8::MAX;
+                self.irreversable_state.push((target_type, self.en_passant, self.castling, self.half_move, self.hash()));
+                self.en_passant = -1;
                 self.update_castling(start, target);
                 
-                self.side[colour_index].move_piece(start_type, start, target);
+                self.move_piece(colour_index, start_type, start, target);
 
                 self.board[start as usize] = NONE;
                 self.remove_attack_and_update(start_type, colour, start);
@@ -256,21 +324,54 @@ impl Chess {
                     self.put_attack_and_update(start_type, colour, target);
                 } else {
                     self.half_move = 0;
-                    self.side[opponent_index].remove_piece(target_type, target);
+                    self.remove_piece(opponent_index, target_type, target);
 
                     self.piece_attack(target_type, colour.opponent(), target, -1);
                     self.piece_attack(start_type, colour, target, 1);
                 }
             }
-            Moves::Promotion { start, target, promotion_type } => {
-                let target_type = self.board[target as usize].get_type();
-
-                self.irreversable_state.push((target_type, self.en_passant, self.castling, self.half_move));
-                self.en_passant = u8::MAX;
+            DOUBLE_PUSH_FLAG => {
+                let (start, target) = (r#move.start(), r#move.target());
+                self.irreversable_state.push((NONE_TYPE, self.en_passant, self.castling, self.half_move, self.hash()));
+                self.en_passant = if self.is_white_to_move {target - 8} else {target + 8};
                 self.half_move = 0;
                 
-                self.side[colour_index].remove_piece(PAWN, start);
-                self.side[colour_index].pieces(promotion_type).push(target);
+                self.move_piece(colour_index, PAWN, start, target);
+
+                self.board[target as usize] = Piece::new(PAWN, colour);
+                self.put_attack_and_update(PAWN, colour, target);
+                self.board[start as usize] = NONE;
+                self.remove_attack_and_update(PAWN, colour, start);
+            }
+            EN_PASSANT_FLAG => {
+                let (start, target) = (r#move.start(), r#move.target());
+                let eaten_square = if self.is_white_to_move {target - 8} else {target + 8};
+
+                self.irreversable_state.push((PAWN, self.en_passant, self.castling, self.half_move, self.hash()));
+                self.en_passant = -1;
+                self.half_move = 0;
+
+                self.move_piece(colour_index, PAWN, start, target);
+                self.remove_piece(opponent_index, PAWN, eaten_square);
+                
+                self.board[target as usize] = Piece::new(PAWN, colour);
+                self.put_attack_and_update(PAWN, colour, target);
+                self.board[start as usize] = NONE;
+                self.remove_attack_and_update(PAWN, colour, start);
+                self.board[eaten_square as usize] = NONE;
+                self.remove_attack_and_update(PAWN, colour.opponent(), eaten_square);
+            }
+            _ => { // Promotion
+                let (start, target) = (r#move.start(), r#move.target());
+                let promotion_type = r#move.promotion_type();
+                let target_type = self.board[target as usize].get_type();
+
+                self.irreversable_state.push((target_type, self.en_passant, self.castling, self.half_move, self.hash()));
+                self.en_passant = -1;
+                self.half_move = 0;
+                
+                self.remove_piece(colour_index, PAWN, start);
+                self.add_piece(colour_index, promotion_type, target);
 
                 self.board[start as usize] = NONE;
                 self.remove_attack_and_update(PAWN, colour, start);
@@ -281,49 +382,22 @@ impl Chess {
                     self.put_attack_and_update(promotion_type, colour, target);
                 } else {
                     self.update_castling_pawn_eats_and_promotion(target);
-                    self.side[opponent_index].remove_piece(target_type, target);
+                    self.remove_piece(opponent_index, target_type, target);
 
                     self.piece_attack(target_type, colour.opponent(), target, -1);
                     self.piece_attack(promotion_type, colour, target, 1);
                 }
             }
-            Moves::DoublePush { start, target } => {
-                self.irreversable_state.push((NONE_TYPE, self.en_passant, self.castling, self.half_move));
-                self.en_passant = if self.is_white_to_move {target - 8} else {target + 8};
-                self.half_move = 0;
-
-                self.side[colour_index].move_piece(PAWN, start, target);
-
-                self.board[target as usize] = Piece::new(PAWN, colour);
-                self.put_attack_and_update(PAWN, colour, target);
-                self.board[start as usize] = NONE;
-                self.remove_attack_and_update(PAWN, colour, start);
-            }
-            Moves::EnPassant { start, target } => {
-                let eaten_square = if self.is_white_to_move {target - 8} else {target + 8};
-
-                self.irreversable_state.push((PAWN, self.en_passant, self.castling, self.half_move));
-                self.en_passant = u8::MAX;
-                self.half_move = 0;
-
-                self.side[colour_index].move_piece(PAWN, start, target);
-                self.side[opponent_index].remove_piece(PAWN, eaten_square);
-                
-                self.board[target as usize] = Piece::new(PAWN, colour);
-                self.put_attack_and_update(PAWN, colour, target);
-                self.board[start as usize] = NONE;
-                self.remove_attack_and_update(PAWN, colour, start);
-                self.board[eaten_square as usize] = NONE;
-                self.remove_attack_and_update(PAWN, colour.opponent(), eaten_square);
-            }
         }
+        
+        self.black_turn_hash();
         self.full_turn += self.is_white_to_move as u16; // false == 1
         self.is_white_to_move = !self.is_white_to_move;
     }
 
-    fn make_castle(&mut self, colour: Colour, king: u8, rook: u8, king_target: u8, rook_target: u8) {
-        self.side[colour.colour_index()].king = king_target;
-        self.side[colour.colour_index()].move_piece(ROOK, rook, rook_target);
+    fn make_castle(&mut self, colour: Colour, king: Square, rook: Square, king_target: Square, rook_target: Square) {
+        self.move_piece(colour.colour_index(), KING, king, king_target);
+        self.move_piece(colour.colour_index(), ROOK, rook, rook_target);
         
         self.board[rook as usize] = NONE;
         self.remove_attack_and_update(ROOK, colour, rook);
@@ -335,7 +409,7 @@ impl Chess {
         self.put_attack_and_update(ROOK, colour, rook_target);
     }
 
-    fn update_castling(&mut self, start: u8, target: u8) {
+    fn update_castling(&mut self, start: Square, target: Square) {
         for square in [start, target] {
             match square {
                 0 => self.castling &= !CASTLE_WHITE_QUEEN,
@@ -348,7 +422,7 @@ impl Chess {
             }
         }
     }
-    fn update_castling_pawn_eats_and_promotion(&mut self, target: u8) {
+    fn update_castling_pawn_eats_and_promotion(&mut self, target: Square) {
         match target {
             0 => self.castling &= !CASTLE_WHITE_QUEEN,
             7 => self.castling &= !CASTLE_WHITE_KING,
@@ -358,7 +432,8 @@ impl Chess {
         }
     }
 
-    pub fn unmake_move(&mut self, movee: Moves) {
+    pub fn unmake_move(&mut self, r#move: Move) {
+        let (start, target) = (r#move.start(), r#move.target());
         self.is_white_to_move = !self.is_white_to_move;
         self.full_turn -= self.is_white_to_move as u16; // false == 1
         
@@ -366,73 +441,57 @@ impl Chess {
         let colour_index = self.colour_index();
         let opponent_index = self.opponent_index();
         let target_type;
-
-        (target_type, self.en_passant, self.castling, self.half_move) = self.irreversable_state.pop().unwrap();
+        self.black_turn_hash();
         
-        match movee {
-            Moves::KingCastling => {
+        (target_type, self.en_passant, self.castling, self.half_move, _) = self.irreversable_state.pop().unwrap();
+        
+        match r#move.flag() {
+            CASTLE_FLAG => {
                 if self.is_white_to_move {
-                    self.make_castle(WHITE, 6, 5, 4, 7);
+                    if r#move.is_king_castling() {
+                        self.make_castle(WHITE, 6, 5, 4, 7);
+                    } else {
+                        self.make_castle(WHITE, 2, 3, 4, 0);
+                    }
                 } else {
-                    self.make_castle(BLACK, 62, 61, 60, 63);
+                    if r#move.is_king_castling() {
+                        self.make_castle(BLACK, 62, 61, 60, 63);
+                    } else {
+                        self.make_castle(BLACK, 58, 59, 60, 56);
+                    }
                 }
             }
-            Moves::QueenCastling => {
-                if self.is_white_to_move {
-                    self.make_castle(WHITE, 2, 3, 4, 0);
-                } else {
-                    self.make_castle(BLACK, 58, 59, 60, 56);
-                }
-            }
-            Moves::Move { start, target } => {
+            NO_FLAG => {
                 let start_type = self.board[target as usize].get_type();
                 
                 if target_type == NONE_TYPE {
                     self.board[target as usize] = NONE;
                     self.remove_attack_and_update(start_type, colour, target);
                 } else {
-                    self.side[opponent_index].pieces(target_type).push(target);
+                    self.add_piece(opponent_index, target_type, target);
                     
                     self.board[target as usize] = Piece::new(target_type, colour.opponent());
                     self.piece_attack(start_type, colour, target, -1);
                     self.piece_attack(target_type, colour.opponent(), target, 1);
                 }
-                self.side[colour_index].move_piece(start_type, target, start);
+                self.move_piece(colour_index, start_type, target, start);
                 
                 self.board[start as usize] = Piece::new(start_type, colour);
                 self.put_attack_and_update(start_type, colour, start);
             }
-            Moves::Promotion { start, target, promotion_type } => {
-                self.side[colour_index].remove_piece(promotion_type, target);
-                self.side[colour_index].pieces(PAWN).push(start);
-
-                self.board[start as usize] = Piece::new(PAWN, colour);
-                self.put_attack_and_update(PAWN, colour, start);
-                
-                if target_type == NONE_TYPE {
-                    self.board[target as usize] = NONE;
-                    self.remove_attack_and_update(promotion_type, colour, target);
-                } else {
-                    self.side[opponent_index].pieces(target_type).push(target);
-
-                    self.board[target as usize] = Piece::new(target_type, colour.opponent());
-                    self.piece_attack(promotion_type, colour, target, -1);
-                    self.piece_attack(target_type, colour.opponent(), target, 1);
-                }
-            }
-            Moves::DoublePush { start, target } => {
-                self.side[colour_index].move_piece(PAWN, target, start);
+            DOUBLE_PUSH_FLAG => {
+                self.move_piece(colour_index, PAWN, target, start);
                 
                 self.board[start as usize] = Piece::new(PAWN, colour);
                 self.put_attack_and_update(PAWN, colour, start);
                 self.board[target as usize] = NONE;
                 self.remove_attack_and_update(PAWN, colour, target);
             }
-            Moves::EnPassant { start, target } => {
+            EN_PASSANT_FLAG => {
                 let eaten_square = if self.is_white_to_move {target - 8} else {target + 8};
 
-                self.side[colour_index].move_piece(PAWN, target, start);
-                self.side[opponent_index].pieces(PAWN).push(eaten_square);
+                self.move_piece(colour_index, PAWN, target, start);
+                self.add_piece(opponent_index, PAWN, eaten_square);
                 
                 self.board[start as usize] = Piece::new(PAWN, colour);
                 self.put_attack_and_update(PAWN, colour, start);
@@ -441,52 +500,43 @@ impl Chess {
                 self.board[target as usize] = NONE;
                 self.remove_attack_and_update(PAWN, colour, target);
             }
+            _ => {
+                let promotion_type = r#move.promotion_type();
+                self.remove_piece(colour_index, promotion_type, target);
+                self.add_piece(colour_index, PAWN, start);
+
+                self.board[start as usize] = Piece::new(PAWN, colour);
+                self.put_attack_and_update(PAWN, colour, start);
+                
+                if target_type == NONE_TYPE {
+                    self.board[target as usize] = NONE;
+                    self.remove_attack_and_update(promotion_type, colour, target);
+                } else {
+                    self.add_piece(opponent_index, target_type, target);
+
+                    self.board[target as usize] = Piece::new(target_type, colour.opponent());
+                    self.piece_attack(promotion_type, colour, target, -1);
+                    self.piece_attack(target_type, colour.opponent(), target, 1);
+                }
+            }
         }
     }
 } 
 
 pub mod utils {
     use super::*;
-
+    
     pub fn is_black_square(square: Square) -> bool {
         (square + square / 8) % 2 == 0
     }
-    pub fn number_from_0_9(number: char) -> usize {
-        number.to_digit(10).unwrap() as usize
-    }
-    pub fn number_from_a_h(letter: char) -> usize {
-        letter as usize - 'a' as usize
+    
+    pub fn square_to_text(square: Square) -> String {
+        format!("{}{}", ('a' as Square + square % 8) as u8 as char, (square / 8) + 1)
     }
     pub fn square_from_text(letter: char, number: char) -> Square {
-        ((number_from_0_9(number)-1) * 8 + number_from_a_h(letter)) as u8
+        let rank = number.to_digit(10).unwrap() -1;
+        let file = letter as u32 - 'a' as u32;
+        return (rank * 8 + file) as Square;
     }
-    pub fn gen_move(chess: &Chess, text: &String) -> Moves {
-        let mut chars = text.chars();
-        let start = square_from_text(chars.next().unwrap(), chars.next().unwrap());
-        let target = square_from_text(chars.next().unwrap(), chars.next().unwrap());
-        let promotion = match chars.next() {
-            None | Some('\n') => None,
-            Some(symbol) => Some(Piece::from_symbol(symbol).get_type()),
-        };
-        if let Some(promotion_type) = promotion {
-            return Moves::Promotion { start, target, promotion_type };
-        }
-        if chess.board[start as usize].is_type(KING) {
-            if target as i8 - start as i8 == 2 {
-                return Moves::KingCastling;
-            } if target as i8 - start as i8 == -2 {
-                return Moves::QueenCastling;
-            }
-        } else if chess.board[start as usize].is_type(PAWN) {
-            if target as i8 - start as i8 == 16 {
-                return Moves::DoublePush { start, target };
-            } if target as i8 - start as i8 == -16 {
-                return Moves::DoublePush { start, target };
-            }
-            if target == chess.en_passant {
-                return Moves::EnPassant { start, target };
-            }
-        }
-        return Moves::Move { start, target };
-    }
+
 }

@@ -1,23 +1,12 @@
 use super::*;
 
+pub const START_POSITION: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 impl Chess {
     pub fn build(fen: &str) -> Chess {
-        legal_moves::precompute();
-        
         let mut iter = fen.trim().split(" ");
-        let mut chess = Chess {
-            board: [NONE; 64],
-            en_passant: u8::MAX,
-            castling: CASTLE_NONE,
-            half_move: 0,
-            full_turn: 1,
-            is_white_to_move: true,
-            side: [Default::default(), Default::default()],
-            irreversable_state: Vec::new(),
-            moves_history: Vec::new(),
-        };
-        chess.irreversable_state.reserve_exact(MAX_DEPTH);
-        chess.moves_history.reserve_exact(MAX_MOVES);
+        
+        let mut chess = Chess::new();
         // Piece Placement
         let fen_board = iter.next().expect("FEN board");
         let (mut rank, mut file) = (7, 0);
@@ -26,20 +15,20 @@ impl Chess {
                 rank -= 1;
                 file = 0;
             } else if symbol.is_ascii_digit() {
-                file += utils::number_from_0_9(symbol);
+                file += symbol.to_digit(10).unwrap() as i8;
             } else {
                 let square = rank * 8 + file;
                 let piece = Piece::from_symbol(symbol);
                 let colour = piece.get_colour();
 
-                chess.side[colour.colour_index()].new_piece(piece.get_type(), square as u8);
-                chess.put_attack_and_update(piece.get_type(), colour, square as u8);
-                chess.board[square] = piece;
+                chess.new_piece(colour.colour_index(), piece.get_type(), square);
+                chess.put_attack_and_update(piece.get_type(), colour, square);
+                chess.board[square as usize] = piece;
                 file += 1
             }
         }
         // Side to move
-        chess.is_white_to_move = iter.next() == Some("w");
+        chess.set_turn(iter.next() == Some("w"));
         // Castling ability
         let string = iter.next();
         if string != Some("-") {

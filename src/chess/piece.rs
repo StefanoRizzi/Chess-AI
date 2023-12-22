@@ -25,21 +25,30 @@ impl Piece {
     pub fn is_colour(self, colour: Colour) -> bool {self.0 & colour.0 != 0}
     
     pub fn from_symbol(symbol: char) -> Piece {
-        let piece = match symbol.to_ascii_lowercase() {
-            'p' => PAWN, 'n' => KNIGHT, 'b' => BISHOP,
-            'r' => ROOK, 'q' => QUEEN, 'k' => KING, _ => unreachable!(),
-        };
-        Piece::new(piece, if symbol.is_ascii_uppercase() {WHITE} else {BLACK})    
+        Piece::new(
+            PieceType::from_symbol(symbol),
+            if symbol.is_ascii_uppercase() {WHITE} else {BLACK},
+        )    
     }
-    pub fn symbol(self: Piece) -> char {
-        let symbol = match self.get_type() {
-            PAWN => 'p', KNIGHT => 'n', BISHOP => 'b',
-            ROOK => 'r', QUEEN => 'q', KING => 'k', _ => unreachable!(),
-        };
+    pub fn symbol(self) -> char {
+        let symbol = self.get_type().symbol();
         if self.is_colour(WHITE) {symbol.to_ascii_uppercase()} else {symbol}
     }
 }
 impl PieceType {
+    pub fn from_symbol(symbol: char) -> PieceType {
+        match symbol.to_ascii_lowercase() {
+            'p' => PAWN, 'n' => KNIGHT, 'b' => BISHOP,
+            'r' => ROOK, 'q' => QUEEN, 'k' => KING, _ => unreachable!(),
+        }
+    }
+    pub fn symbol(self) -> char {
+        match self {
+            PAWN => 'p', KNIGHT => 'n', BISHOP => 'b',
+            ROOK => 'r', QUEEN => 'q', KING => 'k', _ => unreachable!(),
+        }
+    }
+
     pub fn is_sliding(self) -> bool {self.0 >= 4}
     pub fn get_sliding_indices(self) -> std::ops::Range<usize> {
         match self {

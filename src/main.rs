@@ -1,56 +1,28 @@
-use std::io::{self, Write};
-use std::time::Instant;
-use chess_rust::chess::*;
-use chess_rust::random_ai::BadPlayer;
 
-struct HumanPlayer {
-
-}
-impl chess_rust::ChessPlayer for HumanPlayer {
-    fn best_move(&mut self, chess: &mut Chess) -> Moves {
-        loop {
-            let mut cmd = String::new();
-            print!("Human: "); io::stdout().flush().unwrap();
-            io::stdin().read_line(&mut cmd).unwrap();
-            print!("\x1b[A\x1b[J"); io::stdout().flush().unwrap();
-            
-            let movee = utils::gen_move(&chess, &cmd);
-            if chess.generate_legal_moves().contains(&movee) {
-                return movee;
-            }
-        }
-    }
-}
+use chess_rust::{*, legal_moves::precompute};
 
 fn main() {
-    /*for j in (0..8).rev() {
-        for i in 0..8 {
-            print!("  {}", chess.white_side.control[i+j*8]);
-        }
-        println!()
-    }*/
-    /*for movee in chess.generate_legal_moves() {
-        chess.make_move(movee);
-        println!("{movee:?} num {}", chess.perft(2));
-        
-        let the_move = Moves::Move { start: 59, target: 32 };
-        if !chess.generate_legal_moves().contains(&the_move) {
-            println!("{movee:#?} {}", chess.generate_legal_moves().len());
-            panic!();
-            if movee != (Moves::Move { start: 2, target: 47 }) {
-                panic!()
-            }
-        }
-        chess.unmake_move(movee);
-    }*/
-    /*let movee = Moves::DoublePush { start: 11, target: 27 }; if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee); chess.unmake_move(movee); if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee);
-    let movee = Moves::Move { start: 16, target: 20 }; if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee); chess.unmake_move(movee); if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee);
-    chess.display();*/
-    //let movee = Moves::Move { start: 13, target: 23 }; if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee); chess.unmake_move(movee); if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee);
-    //let movee = Moves::Move { start: 6, target: 7 }; if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee); chess.unmake_move(movee); if !chess.generate_legal_moves().contains(&movee) {panic!()}; chess.make_move(movee);
-    //println!("{:#?}", chess.generate_legal_moves().len());
-    chess_rust::benchmark();
-    //chess_rust::compete(&mut HumanPlayer{}, &mut HumanPlayer{}, 900);
+    precompute();
     //unsafe {DISPLAY = false}
-    //chess_rust::compete(&mut BadPlayer::new(), &mut BadPlayer::new(), 900);
+
+    /*let mut chess = Chess::build("k7/pp6/r7/8/8/8/PP6/K6R w - - 0 1");
+    play(&mut chess, &mut BossPlayer::new(), &mut BossPlayer::new());
+
+    return;
+    */
+
+    //benchmark(4);
+    //play(&mut Chess::position(1), &mut HumanPlayer::new("H1".to_string()), &mut BossPlayer::new());
+    //compete(&mut BossPlayer::new(), &mut BadPlayer::new(), 1000);
+    //return;
+    let mut engine = BossPlayer::new().into_engine_uci();
+    let mut message = String::new();
+    engine.greet();
+
+    loop {
+        std::io::stdin().read_line(&mut message).unwrap();
+        engine.received_command(&message.trim());
+        if message == "quit\n" {break}
+        message.clear();
+    }
 }

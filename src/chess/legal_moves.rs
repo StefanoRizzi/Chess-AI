@@ -1,19 +1,19 @@
-use std::cmp::min;
+use std::{cmp::min, sync::Mutex};
 
 use super::*;
 
-pub static mut PRECOMPUTED: bool = false;
-const TMP_VEC: Vec<u8> = Vec::new();
+static PRECOMPUTED: std::sync::Mutex<bool> = Mutex::new(false);
 
 pub const DIRECTION_OFFSETS: [i8;8] = [8,-8,1,-1,7,-7,9,-9];
 pub const DIRECTION_OPPOST_INDEX: [usize;8] = [1,0,3,2,5,4,7,6];
 pub static mut NUM_SQUARES_TO_EDGES: [[u8;8]; 64] = [[0;8]; 64];
 
-pub static mut KING_ATTACKS: [Vec<Square>;64] = [TMP_VEC;64];
-pub static mut KNIGHT_ATTACKS: [Vec<Square>;64] = [TMP_VEC;64];
-pub static mut PAWN_ATTACKS: [[Vec<Square>;64]; 2] = [[TMP_VEC;64], [TMP_VEC;64]];
+const NEW_VEC: Vec<Square> = Vec::new();
+pub static mut KING_ATTACKS: [Vec<Square>;64] = [NEW_VEC;64];
+pub static mut KNIGHT_ATTACKS: [Vec<Square>;64] = [NEW_VEC;64];
+pub static mut PAWN_ATTACKS: [[Vec<Square>;64]; 2] = [[NEW_VEC;64], [NEW_VEC;64]];
 
-pub fn piece_attacks(piece_type: PieceType, colour: Colour, square: Square) -> &'static mut Vec<u8> {
+pub fn piece_attacks(piece_type: PieceType, colour: Colour, square: Square) -> &'static mut Vec<Square> {
     &mut (match piece_type {
         KING => unsafe {&mut KING_ATTACKS},
         KNIGHT => unsafe {&mut KNIGHT_ATTACKS},
@@ -21,9 +21,12 @@ pub fn piece_attacks(piece_type: PieceType, colour: Colour, square: Square) -> &
         _ => unreachable!(),
     })[square as usize]
 }
-pub fn precompute() {
-    if unsafe {PRECOMPUTED} {return}
-    unsafe {PRECOMPUTED = true}
+pub fn precompute() { // mutex because rust is bugged on tests
+    let mut precomputed = PRECOMPUTED.lock().unwrap();
+    if *precomputed {return}
+    *precomputed = true;
+    
+    *LOG.lock().unwrap() = Some(File::create("/home/di77i/chess_log.txt").unwrap());
     precomputed_move_data();
     precomputed_king_attacks();
     precomputed_knight_attacks();
@@ -56,7 +59,7 @@ fn precomputed_king_attacks() {
         for dir_index in 0..8 {
             let dist_edge = unsafe {NUM_SQUARES_TO_EDGES[square as usize][dir_index]};
             if dist_edge >= 1 {
-                let target = (square as i8 + DIRECTION_OFFSETS[dir_index]) as u8;
+                let target = square + DIRECTION_OFFSETS[dir_index];
                 unsafe {KING_ATTACKS[square as usize].push(target)};
             }
         }
@@ -65,10 +68,10 @@ fn precomputed_king_attacks() {
 fn precomputed_knight_attacks() {
     for square in 0..64 {
         for jump in [-17, -15, -10, -6, 6, 10, 15, 17] {
-            let target = (square as i8 + jump) as u8;
-            if target >= 64 {continue}
-            if square as i8 % 8 - target as i8 % 8 > 2 {continue}
-            if square as i8 % 8 - target as i8 % 8 < -2 {continue}
+            let target = square + jump;
+            if target >= 64 || target < 0 {continue}
+            if square % 8 - target % 8 > 2 {continue}
+            if square % 8 - target % 8 < -2 {continue}
             unsafe {KNIGHT_ATTACKS[square as usize].push(target)};
         }
     }
@@ -79,7 +82,7 @@ fn precomputed_pawn_attacks() {
             for &dir_index in attacks {
                 let dist_edge = unsafe {NUM_SQUARES_TO_EDGES[square as usize][dir_index]};
                 if dist_edge >= 1 {
-                    let target = (square as i8 + DIRECTION_OFFSETS[dir_index]) as u8;
+                    let target = square + DIRECTION_OFFSETS[dir_index];
                     unsafe {PAWN_ATTACKS[colour_index][square as usize].push(target)};
                 }
             }
@@ -88,8 +91,7 @@ fn precomputed_pawn_attacks() {
 }
 
 impl Chess {
-    pub fn generate_legal_moves(&self) -> Vec<Moves> {
-        if self.half_move >= 100 {return Vec::new()}
+    pub fn generate_legal_moves(&self) -> Vec<Move> {
 
         let colour = self.colour_to_move();
         let colour_index = self.colour_index();
@@ -208,7 +210,7 @@ impl Chess {
             let mut defend_squares = Vec::new();
 
             for n in 0..dist_edge {
-                let pinned_square = (square as i8 + DIRECTION_OFFSETS[dir_index] * (n+1) as i8) as u8;
+                let pinned_square = square + DIRECTION_OFFSETS[dir_index] * (n+1) as i8;
                 let pinned_piece = self.board[pinned_square as usize];
                 
                 defend_squares.push(pinned_square);
@@ -217,7 +219,7 @@ impl Chess {
                 if pinned_piece.is_colour(colour) {
 
                     for n2 in (n+1)..dist_edge {
-                        let target_square = (square as i8 + DIRECTION_OFFSETS[dir_index] * (n2+1) as i8) as u8;
+                        let target_square = square + DIRECTION_OFFSETS[dir_index] * (n2+1) as i8;
                         let target_piece = self.board[target_square as usize];
                         
                         defend_squares.push(target_square);
@@ -246,7 +248,7 @@ impl Chess {
     }
     
     pub fn is_en_passant_pinned(&self) -> bool {
-        if self.en_passant == u8::MAX {return false}
+        if self.en_passant == -1 {return false}
         
         let colour = self.colour_to_move();
         let king = self.side[self.colour_index()].king;
@@ -254,13 +256,13 @@ impl Chess {
         
         if king / 8 != rank {return false}
         
-        let mut pinned_pawn = u8::MAX;
+        let mut pinned_pawn = -1;
         let dir_index = if king % 8 > self.en_passant % 8 {3} else {2};
         
         let dist_edge = unsafe {NUM_SQUARES_TO_EDGES[king as usize][dir_index]};
         
         for n in 0..dist_edge {
-            let target_square = (king as i8 + DIRECTION_OFFSETS[dir_index] * (n+1) as i8) as u8;
+            let target_square = king + DIRECTION_OFFSETS[dir_index] * (n+1) as i8;
             let target_piece = self.board[target_square as usize];
 
             if target_piece == NONE {continue}
@@ -268,7 +270,7 @@ impl Chess {
             if target_piece.get_type() == PAWN {
 
                 if target_piece.is_colour(colour) {
-                    if pinned_pawn == u8::MAX {
+                    if pinned_pawn == -1 {
                         pinned_pawn = target_square;
                         continue;
                     }
@@ -280,7 +282,7 @@ impl Chess {
 
             }
             else if !target_piece.is_colour(colour)
-            && pinned_pawn != u8::MAX {
+            && pinned_pawn != -1 {
                 if target_piece.get_type().is_sliding()
                 && target_piece.get_type().get_sliding_indices().contains(&dir_index) {
                     return true;
@@ -291,33 +293,33 @@ impl Chess {
         return false;
     }
 
-    fn generate_sliding_moves(&self, moves: &mut Vec<Moves>, start: Square, piece: PieceType) {
+    fn generate_sliding_moves(&self, moves: &mut Vec<Move>, start: Square, piece: PieceType) {
         for dir_index in piece.get_sliding_indices() {
             let dist_edge = unsafe {NUM_SQUARES_TO_EDGES[start as usize][dir_index]};
 
             for n in 0..dist_edge {
-                let target = (start as i8 + DIRECTION_OFFSETS[dir_index] * (n + 1) as i8) as u8;
+                let target = start + DIRECTION_OFFSETS[dir_index] * (n + 1) as i8;
                 let target_piece = self.board[target as usize];
 
                 if target_piece.is_colour(self.colour_to_move()) {break}
 
-                moves.push(Moves::Move { start, target });
+                moves.push(Move::new(start, target, NO_FLAG));
 
                 if target_piece != NONE {break}
             }
         }
     }
-    fn generate_sliding_defenses(&self, moves: &mut Vec<Moves>, start: Square, piece: PieceType, defend_squares: &Vec<Square>) {
+    fn generate_sliding_defenses(&self, moves: &mut Vec<Move>, start: Square, piece: PieceType, defend_squares: &Vec<Square>) {
         for dir_index in piece.get_sliding_indices() {
             let dist_edge = unsafe {NUM_SQUARES_TO_EDGES[start as usize][dir_index]};
             for n in 0..dist_edge {
-                let target = (start as i8 + DIRECTION_OFFSETS[dir_index] * (n + 1) as i8) as u8;
+                let target = start + DIRECTION_OFFSETS[dir_index] * (n + 1) as i8;
                 let target_piece = self.board[target as usize];
 
                 if target_piece.is_colour(self.colour_to_move()) {break}
 
                 if defend_squares.contains(&target) {
-                    moves.push(Moves::Move { start, target });
+                    moves.push(Move::new(start, target, NO_FLAG));
                 }
 
                 if target_piece != NONE {break}
@@ -325,7 +327,7 @@ impl Chess {
         }
     }
 
-    fn generate_pawn_moves(&self, moves: &mut Vec<Moves>, start: Square, is_en_passant_pinned: bool) {
+    fn generate_pawn_moves(&self, moves: &mut Vec<Move>, start: Square, is_en_passant_pinned: bool) {
         let opponent_color = self.colour_to_move().opponent();
 
         let (double_push_rank, promotion_rank, pawn_heading) = if self.is_white_to_move {(1,6,8)} else {(6,1,-8)};
@@ -335,16 +337,16 @@ impl Chess {
 
             for &target in &pawn_attacks[start as usize] {
                 if self.board[target as usize].is_colour(opponent_color) {
-                    for promotion_type in [QUEEN, KNIGHT, ROOK, BISHOP] {
-                        moves.push(Moves::Promotion { start, target, promotion_type });
+                    for promotion_flag in [PROMOTE_TO_QUEEN_FLAG, PROMOTE_TO_KNIGHT_FLAG, PROMOTE_TO_ROOK_FLAG, PROMOTE_TO_BISHOP_FLAG] {
+                        moves.push(Move::new(start, target, promotion_flag));
                     }
                 }
             }
-            let target = (start as i8 + pawn_heading) as u8;
+            let target = start + pawn_heading;
 
             if self.board[target as usize] == NONE {
-                for promotion_type in [QUEEN, KNIGHT, ROOK, BISHOP] {
-                    moves.push(Moves::Promotion { start, target, promotion_type });
+                for promotion_flag in [PROMOTE_TO_QUEEN_FLAG, PROMOTE_TO_KNIGHT_FLAG, PROMOTE_TO_ROOK_FLAG, PROMOTE_TO_BISHOP_FLAG] {
+                    moves.push(Move::new(start, target, promotion_flag));
                 }
             }
 
@@ -353,28 +355,28 @@ impl Chess {
 
             for &target in &pawn_attacks[start as usize] {
                 if self.board[target as usize].is_colour(opponent_color) {
-                    moves.push(Moves::Move { start, target });
+                    moves.push(Move::new(start, target, NO_FLAG));
                 }
                 else if target == self.en_passant && !is_en_passant_pinned {
-                    moves.push(Moves::EnPassant { start, target });
+                    moves.push(Move::new(start, target, EN_PASSANT_FLAG));
                 }
             }
-            let target = (start as i8 + pawn_heading) as u8;
+            let target = start + pawn_heading;
 
             if self.board[target as usize] == NONE {
-                moves.push(Moves::Move { start, target });
+                moves.push(Move::new(start, target, NO_FLAG));
                 
                 if start / 8 == double_push_rank {
-                    let target = (target as i8 + pawn_heading) as u8;
+                    let target = target + pawn_heading;
 
                     if self.board[target as usize] == NONE {
-                        moves.push(Moves::DoublePush { start, target });
+                        moves.push(Move::new(start, target, DOUBLE_PUSH_FLAG));
                     }
                 }
             }
         }
     }
-    fn generate_pawn_defenses(&self, moves: &mut Vec<Moves>, start: Square, is_en_passant_defense: bool, defend_squares: &Vec<Square>) {
+    fn generate_pawn_defenses(&self, moves: &mut Vec<Move>, start: Square, is_en_passant_defense: bool, defend_squares: &Vec<Square>) {
         let opponent_color = self.colour_to_move().opponent();
 
         let (double_push_rank, promotion_rank, pawn_heading) = if self.is_white_to_move {(1,6,8)} else {(6,1,-8)};
@@ -385,18 +387,18 @@ impl Chess {
             for &target in &pawn_attacks[start as usize] {
                 if self.board[target as usize].is_colour(opponent_color) {
                     if defend_squares.contains(&target) {
-                        for promotion_type in [QUEEN, KNIGHT, ROOK, BISHOP] {
-                            moves.push(Moves::Promotion { start, target, promotion_type });
+                        for promotion_flag in [PROMOTE_TO_QUEEN_FLAG, PROMOTE_TO_KNIGHT_FLAG, PROMOTE_TO_ROOK_FLAG, PROMOTE_TO_BISHOP_FLAG] {
+                            moves.push(Move::new(start, target, promotion_flag));
                         }
                     }
                 }
             }
-            let target = (start as i8 + pawn_heading) as u8;
+            let target = start + pawn_heading;
 
             if self.board[target as usize] == NONE {
                 if defend_squares.contains(&target) {
-                    for promotion_type in [QUEEN, KNIGHT, ROOK, BISHOP] {
-                        moves.push(Moves::Promotion { start, target, promotion_type });
+                    for promotion_flag in [PROMOTE_TO_QUEEN_FLAG, PROMOTE_TO_KNIGHT_FLAG, PROMOTE_TO_ROOK_FLAG, PROMOTE_TO_BISHOP_FLAG] {
+                        moves.push(Move::new(start, target, promotion_flag));
                     }
                 }
             }
@@ -407,27 +409,27 @@ impl Chess {
             for &target in &pawn_attacks[start as usize] {
                 if defend_squares.contains(&target) {
                     if self.board[target as usize].is_colour(opponent_color) {
-                        moves.push(Moves::Move { start, target });
+                        moves.push(Move::new(start, target, NO_FLAG));
                     }
                 }
                 if target == self.en_passant && is_en_passant_defense {
-                    moves.push(Moves::EnPassant { start, target });
+                    moves.push(Move::new(start, target, EN_PASSANT_FLAG));
                 }
             }
-            let target = (start as i8 + pawn_heading) as u8;
+            let target = start + pawn_heading;
 
             if self.board[target as usize] == NONE {
 
                 if defend_squares.contains(&target) {
-                    moves.push(Moves::Move { start, target });
+                    moves.push(Move::new(start, target, NO_FLAG));
                 }
                 
                 if start / 8 == double_push_rank {
-                    let target = (target as i8 + pawn_heading) as u8;
+                    let target = target + pawn_heading;
 
                     if self.board[target as usize] == NONE {
                         if defend_squares.contains(&target) {
-                            moves.push(Moves::DoublePush { start, target });
+                            moves.push(Move::new(start, target, DOUBLE_PUSH_FLAG));
                         }
                     }
                 }
@@ -452,17 +454,17 @@ impl Chess {
         unreachable!()
     }
 
-    fn generate_knight_moves(&self, moves: &mut Vec<Moves>, start: Square) {
+    fn generate_knight_moves(&self, moves: &mut Vec<Move>, start: Square) {
         for &target in unsafe {&KNIGHT_ATTACKS[start as usize]} {
             if !self.board[target as usize].is_colour(self.colour_to_move()) {
-                moves.push(Moves::Move { start, target });
+                moves.push(Move::new(start, target, NO_FLAG));
             }
         }
     }
-    fn generate_knight_defenses(&self, moves: &mut Vec<Moves>, start: Square, defend_squares: &Vec<Square>) {
+    fn generate_knight_defenses(&self, moves: &mut Vec<Move>, start: Square, defend_squares: &Vec<Square>) {
         for &target in unsafe {&KNIGHT_ATTACKS[start as usize]} {
             if defend_squares.contains(&target) {
-                moves.push(Moves::Move { start, target });
+                moves.push(Move::new(start, target, NO_FLAG));
             }
         }
     }
@@ -477,7 +479,7 @@ impl Chess {
         unreachable!()
     }
     
-    fn generate_king_moves(&self, moves: &mut Vec<Moves>) {
+    fn generate_king_moves(&self, moves: &mut Vec<Move>) {
         let colour = self.colour_to_move();
         let opponent_attacks = &self.side[self.opponent_index()].attacks;
         let start = self.side[self.colour_index()].king;
@@ -485,7 +487,7 @@ impl Chess {
         for &target in unsafe {&KING_ATTACKS[start as usize]} {
             if !self.board[target as usize].is_colour(colour)
             && opponent_attacks[target as usize] == 0 {
-                moves.push(Moves::Move { start, target })
+                moves.push(Move::new(start, target, NO_FLAG))
             }
         }
         if self.is_white_to_move {
@@ -495,7 +497,7 @@ impl Chess {
                 && opponent_attacks[4] == 0
                 && opponent_attacks[5] == 0
                 && opponent_attacks[6] == 0 {
-                    moves.push(Moves::KingCastling);
+                    moves.push(Move::new(4, 6, CASTLE_FLAG));
                 }
             }
             if self.castling & CASTLE_WHITE_QUEEN != 0 {
@@ -505,7 +507,7 @@ impl Chess {
                 && opponent_attacks[2] == 0
                 && opponent_attacks[3] == 0
                 && opponent_attacks[4] == 0 {
-                    moves.push(Moves::QueenCastling);
+                    moves.push(Move::new(4, 2, CASTLE_FLAG));
                 }
             }
         }
@@ -516,7 +518,7 @@ impl Chess {
                 && opponent_attacks[60] == 0
                 && opponent_attacks[61] == 0
                 && opponent_attacks[62] == 0 {
-                    moves.push(Moves::KingCastling);
+                    moves.push(Move::new(60, 62, CASTLE_FLAG));
                 }
             }
             if self.castling & CASTLE_BLACK_QUEEN != 0 {
@@ -526,7 +528,7 @@ impl Chess {
                 && opponent_attacks[58] == 0
                 && opponent_attacks[59] == 0
                 && opponent_attacks[60] == 0 {
-                    moves.push(Moves::QueenCastling);
+                    moves.push(Move::new(60, 58, CASTLE_FLAG));
                 }
             }
         }
