@@ -17,6 +17,9 @@ pub fn write_to_log(message: &str) {
     (*LOG.lock().unwrap()).as_mut().unwrap().write(message.as_bytes()).unwrap();
     (*LOG.lock().unwrap()).as_mut().unwrap().write("\n".as_bytes()).unwrap();
 }
+pub fn clear_log() {
+    *LOG.lock().unwrap() = Some(File::create("/home/di77i/chess_log.txt").unwrap());
+}
 
 pub fn benchmark(depth: u16) {
     let mut chess = Chess::start_position();
@@ -29,7 +32,7 @@ pub fn compete(player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer, g
         println!("Game {} of {games}", n+1);
         let mut chess = Chess::start_position();
         if n % 2 == 0 {
-            let outcome = play(&mut chess, player_1, player_2);
+            let outcome = play(&mut chess, player_1, player_2, None);
             match outcome {
                 ChessOutcome::Draw => draw += 1,
                 ChessOutcome::WhiteWinner => won += 1,
@@ -37,7 +40,7 @@ pub fn compete(player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer, g
             }
         }
         else {
-            let outcome = play(&mut chess, player_2, player_1);
+            let outcome = play(&mut chess, player_2, player_1, None);
             match outcome {
                 ChessOutcome::Draw => draw += 1,
                 ChessOutcome::WhiteWinner => lost += 1,
@@ -48,7 +51,7 @@ pub fn compete(player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer, g
     }
 }
 
-pub fn play(chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer) -> ChessOutcome {
+pub fn play(chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dyn ChessPlayer, time: Option<Duration>) -> ChessOutcome {
     player_1.notify_new_game();
     player_2.notify_new_game();
     player_1.set_position(&chess);
@@ -59,7 +62,7 @@ pub fn play(chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dy
         moves = chess.generate_legal_moves();
         if chess.is_finished(&moves) {break}
         sleep(Duration::from_millis(1));
-        let r#move = player_1.best_move(chess, None);
+        let r#move = player_1.best_move(chess, time);
         chess.make_move(r#move);
         player_1.make_move(r#move);
         player_2.make_move(r#move);
@@ -68,7 +71,7 @@ pub fn play(chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dy
         moves = chess.generate_legal_moves();
         if chess.is_finished(&moves) {break}
         sleep(Duration::from_millis(1));
-        let r#move = player_2.best_move(chess, None);
+        let r#move = player_2.best_move(chess, time);
         chess.make_move(r#move);
         player_1.make_move(r#move);
         player_2.make_move(r#move);

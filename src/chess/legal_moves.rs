@@ -26,7 +26,7 @@ pub fn precompute() { // mutex because rust is bugged on tests
     if *precomputed {return}
     *precomputed = true;
     
-    *LOG.lock().unwrap() = Some(File::create("/home/di77i/chess_log.txt").unwrap());
+    clear_log();
     precomputed_move_data();
     precomputed_king_attacks();
     precomputed_knight_attacks();

@@ -193,10 +193,8 @@ pub struct Chess {
     is_white_to_move: bool,
     pub side: [SideState; 2],
     // eaten piece | en passant | castlilg | half move clock | hash
-    pub irreversable_state: Vec<(PieceType, Square, u8, u16, u32)>,
-    //pub moves_history: Vec<Move>,
-    hash: u32,
-    //pub positions_history: Vec<u32>,
+    pub irreversable_state: Vec<(PieceType, Square, u8, u16, Hash)>,
+    hash: Hash,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -235,7 +233,7 @@ impl Chess {
             "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
         ][num-1])
     }
-    pub fn hash(&self) -> u32 {
+    pub fn hash(&self) -> Hash {
         let hash = self.castling_hash(self.hash);
         self.en_passant_hash(hash)
     }

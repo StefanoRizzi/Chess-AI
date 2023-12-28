@@ -14,7 +14,7 @@ pub const PROMOTE_TO_BISHOP_FLAG: u8 = 0b0111;
 
 pub const NONE_MOVE: Move = Move { value: 0 };
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, Default)]
 pub struct Move {
     value: u16,
 }

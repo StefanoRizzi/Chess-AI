@@ -9,6 +9,7 @@ const QUEEN_VALUE: Eval = 900;
 
 impl BossPlayer {
     pub fn evaluate(&mut self, chess: &mut Chess) -> Eval {
+        self.evaluated += 1;
         let white_eval = self.count_material(chess, WHITE.colour_index());
         let black_eval = self.count_material(chess, BLACK.colour_index());
     

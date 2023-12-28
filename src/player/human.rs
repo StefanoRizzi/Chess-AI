@@ -17,7 +17,7 @@ impl ChessPlayer for HumanPlayer {
     fn make_move(&mut self, r#move: Move) {}
     fn notify_new_game(&self) {}
     fn set_position(&mut self, chess: &Chess) {}
-    fn best_move(&mut self, chess: &mut Chess, time: Option<(Duration, Duration)>) -> Move {
+    fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> Move {
         loop {
             let mut text = String::new();
             /*

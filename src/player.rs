@@ -23,7 +23,7 @@ pub trait ChessPlayer {
 
     fn notify_new_game(&self);
     fn set_position(&mut self, chess: &Chess);
-    fn best_move(&mut self, chess: &mut Chess, time: Option<(Duration, Duration)>) -> Move;
+    fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> Move;
     fn make_move(&mut self, r#move: Move);
     fn evaluate_infinite(&mut self, chess: &mut Chess) -> Eval;
 }
@@ -128,7 +128,7 @@ impl<PLAYER: ChessPlayer> EngineUCI<PLAYER> {
             },
         );*/
         
-        let best_move = self.player.best_move(&mut self.chess, None);
+        let best_move = self.player.best_move(&mut self.chess, Some(Duration::from_millis(500)));
 
         self.respond(&format!("bestmove {}", best_move.to_text()));
                     
