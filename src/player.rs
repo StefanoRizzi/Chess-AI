@@ -3,6 +3,7 @@ use super::*;
 use std::io::Write;
 use std::time::Duration;
 use std::fs::File;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 pub mod rizzi_the_boss;
 pub mod random_ai;
@@ -26,17 +27,20 @@ pub trait ChessPlayer {
     fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> Move;
     fn make_move(&mut self, r#move: Move);
     fn evaluate_infinite(&mut self, chess: &mut Chess) -> Eval;
+    fn get_quit(&self) -> Arc<AtomicBool> {Arc::new(AtomicBool::new(false))}
 }
 
 pub struct EngineUCI<PLAYER: ChessPlayer> {
     chess: Chess,
     player: PLAYER,
+    quit: Arc<AtomicBool>,
     log: File,
 }
 
 impl<PLAYER: ChessPlayer> EngineUCI<PLAYER> {
     pub fn new(player: PLAYER) -> Self {
-        EngineUCI { chess: Chess::new(), player, log: File::create("/home/di77i/uci_log.txt").unwrap() }
+        let quit = player.get_quit();
+        EngineUCI { chess: Chess::new(), player, quit, log: File::create("/home/di77i/uci_log.txt").unwrap() }
     }
 
     pub fn greet(&mut self) {
@@ -60,7 +64,7 @@ impl<PLAYER: ChessPlayer> EngineUCI<PLAYER> {
             "position" => self.process_position_command(arg),
             "go" => self.process_go_command(arg),
             //"stop" => self.process_stop_command(),
-            "quit" => (),
+            "quit" => self.quit.store(true, Ordering::Relaxed),
             _ => println!("Huh? {msg}"),
         }
     }

@@ -14,6 +14,7 @@ pub struct BossPlayer {
     pub evaluated: u32,
     pub depth: u16,
     pub search_canceled: Arc<AtomicBool>,
+
 }
 
 impl BossPlayer {
@@ -24,6 +25,8 @@ impl ChessPlayer for BossPlayer {
     fn name(&self) -> &str {"RizziTheBoss"}
     fn notify_new_game(&self) {}
     fn set_position(&mut self, chess: &Chess) {}
+    fn get_quit(&self) -> Arc<AtomicBool> {self.search_canceled.clone()}
+
     fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> Move {
         let max_depth = if time.is_none() {self.depth} else {u16::MAX};
         let t_start = Instant::now();
@@ -140,7 +143,7 @@ mod boss_tests {
     fn queen_pawn_endgame() {
         boss_fight("8/2K5/3P4/8/8/8/8/6qk w - - 0 1",
         ChessOutcome::BlackWinner,
-        None,
+        Some(Duration::from_millis(50)),
     );
     }
     #[test]

@@ -1,5 +1,10 @@
 
+use crate::legal_moves::piece_attacks;
+
 use super::*;
+
+pub mod square_table;
+pub use square_table::*;
 
 const PLAWN_VALUE: Eval = 100;
 const KNIGHT_VALUE: Eval = 300;
@@ -12,10 +17,14 @@ impl BossPlayer {
         self.evaluated += 1;
         let white_eval = self.count_material(chess, WHITE.colour_index());
         let black_eval = self.count_material(chess, BLACK.colour_index());
-    
-        let mut evaluation = white_eval - black_eval;
         
-        let endgame_weight = 1.0 - (white_eval + black_eval) as f32 / 7800.0;
+        let endgame_weight = 1.0 - white_eval.min(black_eval) as f32 / 3900.0;
+        let white_map_eval = self.count_map_material(chess, WHITE.colour_index(), endgame_weight);
+        let black_map_eval = self.count_map_material(chess, BLACK.colour_index(), endgame_weight);
+        
+        let evaluation = (white_map_eval - black_map_eval) as f32;
+        let mut evaluation = evaluation as Eval;
+        
         evaluation += self.force_king_to_corner_endgame_eval(
             chess,
             chess.side[0].king,
@@ -43,6 +52,33 @@ impl BossPlayer {
         material += chess.side[colour_index].queens.len() as Eval * QUEEN_VALUE;
         return material;
     }
+    pub fn count_map_material(&mut self, chess: &Chess, colour_index: usize, endgame_weight: f32) -> Eval {
+        let mut material  = 0;
+        for &square in &chess.side[colour_index].pawns {
+            let square = if colour_index == BLACK.colour_index() {square} else {(7-square/8)*8 + square%8};
+            material += opening::PAWN_SQAURE_TABLE[square as usize];
+        }
+        for &square in &chess.side[colour_index].knights {
+            let square = if colour_index == BLACK.colour_index() {square} else {(7-square/8)*8 + square%8};
+            material += opening::KNIGHT_SQAURE_TABLE[square as usize];
+        }
+        for &square in &chess.side[colour_index].bishops {
+            let square = if colour_index == BLACK.colour_index() {square} else {(7-square/8)*8 + square%8};
+            material += opening::BISHOP_SQAURE_TABLE[square as usize];
+        }
+        for &square in &chess.side[colour_index].rooks {
+            let square = if colour_index == BLACK.colour_index() {square} else {(7-square/8)*8 + square%8};
+            material += opening::ROOK_SQAURE_TABLE[square as usize];
+        }
+        for &square in &chess.side[colour_index].queens {
+            let square = if colour_index == BLACK.colour_index() {square} else {(7-square/8)*8 + square%8};
+            material += opening::QUEEN_SQAURE_TABLE[square as usize];
+        }
+        let square = chess.side[colour_index].king;
+        let square = if colour_index == BLACK.colour_index() {square} else {(7-square/8)*8 + square%8};
+        material += ((1.0 - endgame_weight) * opening::KING_SQAURE_TABLE[square as usize] as f32) as Eval;
+        return material;
+    }
 
     pub fn force_king_to_corner_endgame_eval(&mut self, chess: &mut Chess, friendly_king: Square, opponent_king: Square, endgame_weight: f32) -> Eval {
         let mut evaluation = 0 as Eval;
@@ -64,6 +100,7 @@ impl BossPlayer {
         
         return ((evaluation * 10) as f32 * endgame_weight) as Eval;
     }
+    
 }
 
 impl PieceType {
