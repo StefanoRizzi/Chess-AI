@@ -36,7 +36,7 @@ Prima serve **aggiungere l'engine** e poi si può **giocare contro**.
 * ***Menù*** in alto => terzultima voce ***Tools*** => prima voce ***Analisis Engines***
 * Bottone ***New***
 * Nel campo ***Name*** inserire **"Boss Player"**
-* Nel campo ***Command*** inserire il path per l'eseguibile che si trova nel repo: [target/release/chess-rust](target/release/chess-rust)
+* Nel campo ***Command*** inserire il path dell'eseguibile che si trova nel repo. L'ultima versione: [versions/boss_pieces_map](versions/boss_pieces_map)
 * Bottone ***OK***
 
 **Giocare contro l'engine:**
