@@ -35,7 +35,8 @@ pub fn generate_random_number_masks() {
     let black_turn_mask_len = 1;
     let castling_mask_len = 16;
     let en_passant_mask_len = 8;
-    let mut numbers_for_zobrist = File::create("/home/di77i/numbers_for_zobrist.txt").unwrap();
+    let path = ROOT_PATH.lock().unwrap().as_ref().unwrap().join("numbers_for_zobrist.txt");
+    let mut numbers_for_zobrist = File::create(path).unwrap();
 
     numbers_for_zobrist.write("--- PIECE MASK ---\n".as_bytes());
     for x in 0..piece_mask_len {

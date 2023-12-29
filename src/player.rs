@@ -40,7 +40,8 @@ pub struct EngineUCI<PLAYER: ChessPlayer> {
 impl<PLAYER: ChessPlayer> EngineUCI<PLAYER> {
     pub fn new(player: PLAYER) -> Self {
         let quit = player.get_quit();
-        EngineUCI { chess: Chess::new(), player, quit, log: File::create("/home/di77i/uci_log.txt").unwrap() }
+        let path = ROOT_PATH.lock().unwrap().as_ref().unwrap().join("uci_log.txt");
+        EngineUCI { chess: Chess::new(), player, quit, log: File::create(path).unwrap() }
     }
 
     pub fn greet(&mut self) {
@@ -132,7 +133,7 @@ impl<PLAYER: ChessPlayer> EngineUCI<PLAYER> {
             },
         );*/
         
-        let best_move = self.player.best_move(&mut self.chess, Some(Duration::from_millis(500)));
+        let best_move = self.player.best_move(&mut self.chess, Some(Duration::from_millis(1_000)));
 
         self.respond(&format!("bestmove {}", best_move.to_text()));
                     

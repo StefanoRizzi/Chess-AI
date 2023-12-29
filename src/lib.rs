@@ -9,16 +9,19 @@ pub use player::*;
 
 pub use std::io::Write;
 pub use std::fs::File;
+pub use std::path::PathBuf;
 // SETTINGS
 pub static mut DISPLAY: bool = true;
+static ROOT_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-pub static LOG: Mutex<Option<File>> = Mutex::new(None);
+pub static  LOG: Mutex<Option<File>> = Mutex::new(None);
 pub fn write_to_log(message: &str) {
     (*LOG.lock().unwrap()).as_mut().unwrap().write(message.as_bytes()).unwrap();
     (*LOG.lock().unwrap()).as_mut().unwrap().write("\n".as_bytes()).unwrap();
 }
 pub fn clear_log() {
-    *LOG.lock().unwrap() = Some(File::create("/home/di77i/chess_log.txt").unwrap());
+    let path = ROOT_PATH.lock().unwrap().as_ref().unwrap().join("chess_log.txt");
+    *LOG.lock().unwrap() = Some(File::create(path).unwrap());
 }
 
 pub fn benchmark(depth: u16) {

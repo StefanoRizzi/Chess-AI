@@ -1,4 +1,4 @@
-use std::{cmp::min, sync::Mutex};
+use std::{cmp::min, sync::Mutex, str::FromStr};
 
 use super::*;
 
@@ -26,6 +26,10 @@ pub fn precompute() { // mutex because rust is bugged on tests
     if *precomputed {return}
     *precomputed = true;
     
+    let path = PathBuf::from_str(&std::env::var("HOME").unwrap()).unwrap().join(".chess-AI");
+    let _ = std::fs::create_dir(&path);
+    *ROOT_PATH.lock().unwrap() = Some(path);
+
     clear_log();
     precomputed_move_data();
     precomputed_king_attacks();
