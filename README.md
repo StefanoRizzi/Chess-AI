@@ -11,8 +11,9 @@ Con ssh:
 ```bash
 git clone git@github.com:StefanoRizzi/Chess-AI.git
 ```
-> Nel repo ci sono gli eseguibili compilati sulla mia macchihna. \
-> Se serve si può ricompilare il programma sulla propria macchina con cargo `cargo build --release`
+> Nel repo ci sono gli eseguibili compilati sulla mia macchina. nella cartella versions \
+> Se serve si può ricompilare il programma sulla propria con cargo `cargo build --release` \
+> L'eseguibile viene salvato in [target/release/chess-rust]()
 
 ## Installazione GUI
 Per giocarci contro io uso **Scid vs Pc** ma si può usare qualsiasi **GUI** di scacchi che sa usare **UCI**.
