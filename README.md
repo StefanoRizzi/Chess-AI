@@ -1,4 +1,4 @@
-AI di scacchi algoritmo alfa-beta pruning con memorizzazione,
+Giocatore di scacchi AI con algoritmo alfa-beta pruning e memorizzazione
 
 # Giocarci contro
 Serve:
