@@ -45,3 +45,16 @@ Prima serve **aggiungere l'engine** e poi si può **giocare contro**.
 * Selezionare l'engine **"Boss Player"**
 * Forse si vuole deselezionare l'impostazione **Use book**, selezionare **Start from current position**, togliere i tempi per mossa
 * Bottone ***Play***
+
+# Implementazione Engine
+Il programma utilizza l'**algoritmo di alpha-beta pruning** e una **transposition table** per la memorizzazione dei nodi visitati. \
+La scacchiera è rappresentata da una **matrice 8x8** e dalle **liste dei pezzi**. Viene anche salvate delle **matrici 8x8** con dentro i quadrati visti dai pezzi. \
+Le posizioni sono ashiate secondo la tecnica **zobrist** , per poter vedere le **ripetizioni** e per la **transposition table**. \
+Le posizione viene solamente valutata dal **materiale** e da delle **mappe coi valori dei pezzi** a seconta della posizione. \
+L'engine comunica con il protocollo **UCI**.
+
+Step successivi per migliorare l'engine:
+* usare rappresentazione **bitboard** per migliorare la velocità e facilitare la valutazione delle posizioni
+* aggiungere un **database di apperture** da seguire per dare varietà al gioco
+* migliorare la **valutazione** delle posizioni
+* migliorare il **"search"** estendendo la richerca per le mosse più significative.
