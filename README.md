@@ -16,10 +16,11 @@ git clone git@github.com:StefanoRizzi/Chess-AI.git
 > L'eseguibile viene salvato in [target/release/chess-rust]()
 
 ## Installazione GUI
-Per giocarci contro io uso **Scid vs Pc** ma si può usare qualsiasi **GUI** di scacchi che sa usare **UCI**.
+Per giocarci contro io uso **Scid vs Pc** ma si può usare qualsiasi **GUI** di scacchi che implementa il protocollo **UCI**.
 
-Per installare **Scid vs Pc** basta soddisfare le dipendenze e lanciare il comandi sotto.
-> Io ho dovuto anche installare il pacchetto **libx11-dev**
+Per scaricare **Scid vs Pc** seguire questo [link](https://sourceforge.net/projects/scidvspc/postdownload). \
+Per installare **Scid vs Pc** basta soddisfare le dipendenze e lanciare i comandi sotto.
+> Nella mia distribuzione ho dovuto anche installare il pacchetto **libx11-dev**
 ```bash
 tar -xzf scid_vs_pc-4.24.tgz
 cd scid_vs_pc-4.24
@@ -29,7 +30,7 @@ sudo make install
 Vedere [**Scid vs Pc**](https://scidvspc.sourceforge.net/) per maggiori informazioni
 
 ## Usare la GUI
-Aprire un nuovo terminale e lanciare `scid`
+Aprire un nuovo terminale e lanciare il comando `scid`
 
 Prima serve **aggiungere l'engine** e poi si può **giocare contro**.
 
@@ -47,14 +48,14 @@ Prima serve **aggiungere l'engine** e poi si può **giocare contro**.
 * Bottone ***Play***
 
 # Implementazione Engine
-Il programma utilizza l'**algoritmo di alpha-beta pruning** e una **transposition table** per la memorizzazione dei nodi visitati. \
-La scacchiera è rappresentata da una **matrice 8x8** e dalle **liste dei pezzi**. Viene anche salvate delle **matrici 8x8** con dentro i quadrati visti dai pezzi. \
-Le posizioni sono ashiate secondo la tecnica **zobrist** , per poter vedere le **ripetizioni** e per la **transposition table**. \
-Le posizione viene solamente valutata dal **materiale** e da delle **mappe coi valori dei pezzi** a seconta della posizione. \
+Il programma utilizza l'**algoritmo di alpha-beta pruning** e una **transposition table** per la memorizzazione dei nodi (posizioni visitate). \
+La scacchiera è rappresentata da una **matrice 8x8** e dalle **liste dei pezzi**. Sono momerizzate anche delle **matrici 8x8** con dentro i quadrati visti dai pezzi. \
+La posizione è hashata secondo la tecnica **zobrist**, per poter vedere le **ripetizioni** e per la **transposition table**. \
+La posizione viene valutata solamente come differenza della somma dei valori dei pezzi, il valore di un pezzo dipende dalla sua locazione e dal tipo di pezzo secondo delle mappe predeterminate. \
 L'engine comunica con il protocollo **UCI**.
 
-Step successivi per migliorare l'engine:
+## Step successivi per migliorare l'engine
 * usare rappresentazione **bitboard** per migliorare la velocità e facilitare la valutazione delle posizioni
-* aggiungere un **database di apperture** da seguire per dare varietà al gioco
+* aggiungere un **database di aperture** da seguire per dare varietà al gioco
 * migliorare la **valutazione** delle posizioni
-* migliorare il **"search"** estendendo la richerca per le mosse più significative.
+* migliorare il **"search"** estendendo la ricerca per le mosse più significative.
