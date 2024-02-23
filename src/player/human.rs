@@ -17,7 +17,7 @@ impl ChessPlayer for HumanPlayer {
     fn make_move(&mut self, r#move: Move) {}
     fn notify_new_game(&self) {}
     fn set_position(&mut self, chess: &Chess) {}
-    fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> Move {
+    fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> (Move, Eval) {
         loop {
             let mut text = String::new();
             /*
@@ -32,9 +32,12 @@ impl ChessPlayer for HumanPlayer {
             
             let r#move = Move::from_text(&chess, &text.trim());
             if chess.generate_legal_moves().contains(&r#move) {
-                return r#move;
+                return (r#move, 0);
             }
         }
     }
-    fn evaluate_infinite(&mut self, chess: &mut Chess) -> Eval {0}
+    fn evaluate_infinite(&mut self,
+        chess: &mut Chess,
+        send_info: fn(depth: u16, eval: Eval, time: u64, nodes: u32, nps: u32, pv: Move),
+    ) {}
 }

@@ -65,7 +65,7 @@ pub fn play(chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dy
         moves = chess.generate_legal_moves();
         if chess.is_finished(&moves) {break}
         sleep(Duration::from_millis(1));
-        let r#move = player_1.best_move(chess, time);
+        let (r#move, _) = player_1.best_move(chess, time);
         chess.make_move(r#move);
         player_1.make_move(r#move);
         player_2.make_move(r#move);
@@ -74,7 +74,7 @@ pub fn play(chess: &mut Chess, player_1: &mut dyn ChessPlayer, player_2: &mut dy
         moves = chess.generate_legal_moves();
         if chess.is_finished(&moves) {break}
         sleep(Duration::from_millis(1));
-        let r#move = player_2.best_move(chess, time);
+        let (r#move, _) = player_2.best_move(chess, time);
         chess.make_move(r#move);
         player_1.make_move(r#move);
         player_2.make_move(r#move);

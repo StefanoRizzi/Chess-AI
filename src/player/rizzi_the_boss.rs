@@ -14,20 +14,21 @@ pub struct BossPlayer {
     pub evaluated: u32,
     pub depth: u16,
     pub search_canceled: Arc<AtomicBool>,
-
+    pub nodes: u32,
+    pub print_info: bool,
 }
 
 impl BossPlayer {
-    pub fn new() -> BossPlayer {BossPlayer { transposition_table: TranspositionTable::new(), evaluated: 0, depth: 4, search_canceled: Arc::new(AtomicBool::new(false)) }}
+    pub fn new() -> BossPlayer {BossPlayer { transposition_table: TranspositionTable::new(), evaluated: 0, depth: 4, search_canceled: Arc::new(AtomicBool::new(false)), nodes: 0, print_info: true }}
 }
 
 impl ChessPlayer for BossPlayer {
     fn name(&self) -> &str {"RizziTheBoss"}
     fn notify_new_game(&self) {}
     fn set_position(&mut self, chess: &Chess) {}
-    fn get_quit(&self) -> Arc<AtomicBool> {self.search_canceled.clone()}
+    fn get_stop(&self) -> Arc<AtomicBool> {self.search_canceled.clone()}
 
-    fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> Move {
+    fn best_move(&mut self, chess: &mut Chess, time: Option<Duration>) -> (Move, Eval) {
         let max_depth = if time.is_none() {self.depth} else {u16::MAX};
         let t_start = Instant::now();
         
@@ -45,11 +46,19 @@ impl ChessPlayer for BossPlayer {
         }
 
         clear_log();
-        let (mut best_move, eval) = self.search(chess, max_depth);
+        fn write_log_and_print(depth: u16, eval: Eval, time: u64, nodes: u32, nps: u32, pv: Move) {
+            write_to_log(&format!("info depth {depth} score cp {eval} time {time} nodes {nodes} nps {nps} pv {}", pv.to_text()));
+            println!("info depth {depth} score cp {eval} time {time} nodes {nodes} nps {nps} pv {}", pv.to_text());
+        }
+        fn write_log(depth: u16, eval: Eval, time: u64, nodes: u32, nps: u32, pv: Move) {
+            write_to_log(&format!("info depth {depth} score cp {eval} time {time} nodes {nodes} nps {nps} pv {}", pv.to_text()));
+        }
+        let send_info = if self.print_info { write_log_and_print } else { write_log };
+        let (mut best_move, eval) = self.search(chess, max_depth, send_info);
         
         if eval == Eval::MAX {
             let old_tt = std::mem::replace(&mut self.transposition_table, TranspositionTable::new());
-            let (best_move_shorter_checkmate, eval_shorter_checkmate) = self.search(chess, max_depth-1);
+            let (best_move_shorter_checkmate, eval_shorter_checkmate) = self.search(chess, max_depth-1, write_log);
             if eval_shorter_checkmate == Eval::MAX {
                 best_move = best_move_shorter_checkmate;
             } else {
@@ -68,6 +77,7 @@ impl ChessPlayer for BossPlayer {
             100.0 * tt.occupancy as f32 / NUM_ENTRIES as f32,
             100.0 * tt.overwrites as f32 / NUM_ENTRIES as f32,
             100.0 * tt.collisions as f32 / NUM_ENTRIES as f32,
+            //tt.hash_collision,
         ));
         
         /*write_to_log("\nHashes {");
@@ -76,11 +86,32 @@ impl ChessPlayer for BossPlayer {
         }
         write_to_log(&format!("}}\nRepetitions: {}", chess.get_repetitions()));
         */
-        best_move
+        return (best_move, eval);
     }
     fn make_move(&mut self, r#move: Move) {}
-    fn evaluate_infinite(&mut self, chess: &mut Chess) -> Eval {
-        0
+    fn evaluate_infinite(&mut self,
+        chess: &mut Chess,
+        send_info: fn(depth: u16, eval: Eval, time: u64, nodes: u32, nps: u32, pv: Move),
+    ) {
+        self.search_canceled.store(false, Ordering::Relaxed);
+
+        clear_log();
+        let write_log = |depth: u16, eval: Eval, time: u64, nodes: u32, nps: u32, pv: Move| {
+            write_to_log(&format!("info depth {depth} score cp {eval} time {time} nodes {nodes} nps {nps} pv {}", pv.to_text()));
+            send_info(depth, eval, time, nodes, nps, pv);
+        };
+        
+        let (mut best_move, eval) = self.search(chess, u16::MAX, write_log);
+        
+        if eval == Eval::MAX {
+            let old_tt = std::mem::replace(&mut self.transposition_table, TranspositionTable::new());
+            let (best_move_shorter_checkmate, eval_shorter_checkmate) = self.search(chess, u16::MAX, write_log);
+            if eval_shorter_checkmate == Eval::MAX {
+                best_move = best_move_shorter_checkmate;
+            } else {
+                self.transposition_table = old_tt;
+            }
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 
 // max turn 30 * 50 = 1500
 const MAX_DEPTH: usize = 3000;
-const MAX_MOVES: usize = 218;
+//const MAX_MOVES: usize = 218;
 
 mod fen;
 mod display;
@@ -161,11 +161,11 @@ impl Chess {
             }
         }
     }
-    pub fn put_attack_and_update(&mut self, piece_type: PieceType, colour: Colour, square: Square) {
+    fn put_attack_and_update(&mut self, piece_type: PieceType, colour: Colour, square: Square) {
         self.piece_attack(piece_type, colour, square, 1);
         self.update_attack_pieces(piece_type, colour, square, -1);
     }
-    pub fn remove_attack_and_update(&mut self, piece_type: PieceType, colour: Colour, square: Square) {
+    fn remove_attack_and_update(&mut self, piece_type: PieceType, colour: Colour, square: Square) {
         self.piece_attack(piece_type, colour, square, -1);
         self.update_attack_pieces(piece_type, colour, square, 1);
     }
@@ -237,31 +237,32 @@ impl Chess {
         let hash = self.castling_hash(self.hash);
         self.en_passant_hash(hash)
     }
-    pub fn is_white_to_move(&self) -> bool {self.is_white_to_move}
-    pub fn set_turn(&mut self, is_white_to_move: bool) {
+    pub fn is_white_to_move(&self) -> bool { self.is_white_to_move }
+    fn set_turn(&mut self, is_white_to_move: bool) {
         if self.is_white_to_move != is_white_to_move {
             self.black_turn_hash();
         }
         self.is_white_to_move = is_white_to_move;
     }
-    pub fn get_repetitions(&self) -> u16 {
+    fn get_repetitions(&self) -> u16 {
         let hash = self.hash();
         let positions = self.half_move;
         self.irreversable_state.iter().rev().take(positions as usize).skip(3).step_by(2).take_while(|el|{
             self.castling == el.2
         }).filter(|el|el.4 == hash).count() as u16
     }
-    pub fn board(&self, square: Square) -> Piece {self.board[square as usize]}
-    pub fn colour_to_move(&self) -> Colour {Colour::new(self.is_white_to_move)}
-    pub fn colour_index(&self) -> usize {!self.is_white_to_move as usize /*self.colour_to_move().colour_index()*/}
-    pub fn opponent_index(&self) -> usize {self.is_white_to_move as usize /*self.colour_to_move().opponent().colour_index()*/}
-    pub fn get_king_square(&self) -> Square {self.side[self.colour_index()].king}
-    pub fn get_king_treats(&self) -> i8 {
-        return self.side[self.opponent_index()].attacks[self.get_king_square() as usize];
-    }
-    pub fn is_king_in_check(&self) -> bool {self.get_king_treats() != 0}
+    pub fn board(&self, square: Square) -> Piece { self.board[square as usize] }
+    pub fn colour_to_move(&self) -> Colour { Colour::new(self.is_white_to_move) }
+    pub fn colour_index(&self) -> usize { !self.is_white_to_move as usize /*self.colour_to_move().colour_index()*/ }
+    pub fn opponent_index(&self) -> usize { self.is_white_to_move as usize /*self.colour_to_move().opponent().colour_index()*/ }
+    fn get_king_square(&self) -> Square { self.side[self.colour_index()].king }
+    fn get_king_treats(&self) -> i8 { self.side[self.opponent_index()].attacks[self.get_king_square() as usize] }
+    fn is_king_in_check(&self) -> bool { self.get_king_treats() != 0 }
     pub fn is_finished(&self, moves: &Vec<Move>) -> bool {
         moves.len() == 0 || self.get_repetitions() >= 1 || self.half_move >= 100
+    }
+    pub fn is_finished_for_real(&self, moves: &Vec<Move>) -> bool {
+        moves.len() == 0 || self.get_repetitions() >= 3 || self.half_move >= 100
     }
     pub fn get_outcome(&self, moves: &Vec<Move>) -> ChessOutcome {
         if self.is_king_in_check() && moves.len() == 0 {
