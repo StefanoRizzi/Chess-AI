@@ -115,6 +115,79 @@ impl ChessPlayer for BossPlayer {
     }
 }
 
+mod time_tests {
+    use std::time::*;
+
+    use super::*;
+    
+    #[test]
+    fn minimax_vs_alpha_beta() {
+        for pos in [1, 3, 4, 5] {
+            println!("[pos: {pos}]");
+            //min-max
+            let mut chess = Chess::position(pos);
+            let mut boss = BossPlayer::new();
+            /*for depth in 1..=5 {
+                let t_start = Instant::now();
+                boss.search_minimax(&mut chess, depth);
+                println!("[Min-Max] Depth: {depth} Time: {:?}", t_start.elapsed());
+            }*/
+            /*for depth in 5..=6 {
+                let t_start = Instant::now();
+                boss.search_ab_no_table(&mut chess, depth, -i16::MAX, i16::MAX, false);
+                println!("[Alpha-Beta] Depth: {depth} Time: {:?}", t_start.elapsed());
+            }*/
+            /*for depth in 7..=7 {
+                let t_start = Instant::now();
+                boss.search_ab_no_table(&mut chess, depth, -i16::MAX, i16::MAX, true);
+                println!("[Alpha-Beta ordina] Depth: {depth} Time: {:?}", t_start.elapsed());
+            }*/
+            for depth in 8..=8 {
+                let t_start = Instant::now();
+                boss.search_ab(&mut chess, depth, -i16::MAX, i16::MAX);
+                println!("[Alpha-Beta hash tale] Depth: {depth} Time: {:?}", t_start.elapsed());
+            }
+            for depth in 8..=8 {
+                let mut chess = Chess::position(pos);
+                let mut boss = BossPlayer::new();
+                let t_start = Instant::now();
+                for iter_depth in 1..=depth {
+                    boss.search_ab(&mut chess, iter_depth, -i16::MAX, i16::MAX);
+                }
+                println!("[Alpha-Beta DFID] Depth: {depth} Time: {:?}", t_start.elapsed());
+            }
+        }
+        panic!()
+    }
+
+    #[test]
+    fn alpha_beta_vs_dfid() {
+        let fen = "r1bq1rk1/ppppnppp/4pn2/1B6/4P3/2PP1N2/P1P2PPP/R1BQ1RK1 w - - 3 8";
+        //for pos in [1, 3, 4, 5] {
+            for depth in [8] {
+                //println!("AB vs DFID [pos: {pos}] [Depth: {depth}]");
+                //alpha-beta
+                let mut chess = Chess::build(fen);
+                let mut boss = BossPlayer::new();
+                
+                let t_start = Instant::now();
+                boss.search_ab(&mut chess, depth, -i16::MAX, i16::MAX);
+                println!("[AB] Time: {:?}", t_start.elapsed());
+                
+                //dfid
+                let mut chess = Chess::build(fen);
+                let mut boss = BossPlayer::new();
+
+                let t_start = Instant::now();
+                for iter_depth in 1..=depth {
+                    boss.search_ab(&mut chess, iter_depth, -i16::MAX, i16::MAX);
+                }
+                println!("[DFID] Time: {:?}", t_start.elapsed());
+            }
+        //}
+        panic!()
+    }
+}
 
 #[cfg(test)]
 mod boss_tests {

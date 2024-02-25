@@ -84,6 +84,37 @@ impl BossPlayer {
         best_evaluation
     }
 
+    pub fn search_ab_no_table(&mut self, chess: &mut Chess, depth: u16, mut alpha: Eval, beta: Eval, order: bool) -> Eval {
+        self.nodes += 1;
+        if depth == 0 {return self.evaluate(chess)}
+
+        let mut moves = chess.generate_legal_moves();
+        if chess.is_finished(&moves) {
+            self.evaluated += 1;
+            match chess.get_outcome(&moves) {
+                ChessOutcome::Draw => return 0,
+                _ => return -Eval::MAX,
+            }
+        }
+        
+        if order {
+            self.order_moves(chess, &mut moves);
+        }
+
+        for r#move in moves {
+            
+            chess.make_move(r#move);
+            let eval = -self.search_ab_no_table(chess, depth - 1, -beta, -alpha, order);
+            chess.unmake_move(r#move);
+
+            if eval >= beta { return beta }
+            if eval > alpha {
+                alpha = eval;
+            }
+        }
+        return alpha
+    }
+
     pub fn search_ab(&mut self, chess: &mut Chess, depth: u16, mut alpha: Eval, beta: Eval) -> Eval {
         if self.search_canceled.load(Ordering::Relaxed) {return 00}
         self.nodes += 1;

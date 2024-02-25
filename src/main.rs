@@ -46,7 +46,7 @@ fn main() {
     }
 
     //uci engine
-    //precompute();
+    legal_moves::precompute();
     
     let mut engine = BossPlayer::new().into_engine_uci();
     let th_stop = engine.stop.clone();
